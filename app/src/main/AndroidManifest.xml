@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Lets the app check "is there any network at all" before trying
+         the desktop, so it can skip straight to standalone mode when
+         there's clearly no connection (e.g. airplane mode) instead of
+         waiting out a connect timeout for nothing. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Deliberately NOT requesting WRITE_EXTERNAL_STORAGE /
+         READ_EXTERNAL_STORAGE: modern Android restricts and deprecates
+         broad storage permissions, and Google Play flags apps that
+         request them without a specific justified need. Chat history is
+         saved to this app's own private storage (no permission needed
+         at all, any Android version), and "Export Chat" uses the system
+         file picker (Storage Access Framework) which also needs no
+         manifest permission. Same real functionality, the way it's
+         actually supposed to be done now. -->
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Smeagol"
+        android:usesCleartextTraffic="true">
+        <!-- usesCleartextTraffic: this talks to a plain http server on
+             your own LAN, not https. Fine for a local personal setup,
+             but worth knowing this app won't work over a public network
+             without adding TLS on the desktop side too. -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Smeagol Settings" />
+    </application>
+</manifest>

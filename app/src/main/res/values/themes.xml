@@ -1,0 +1,17 @@
+<resources>
+    <!-- Theme.MaterialComponents (no "DayNight") is the always-dark
+         variant: deliberate here, not following system light/dark,
+         since a white light-mode screen around the dark hologram
+         widget would look broken rather than themed. -->
+    <style name="Theme.Smeagol" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="colorPrimary">@color/smeagol_accent</item>
+        <item name="colorPrimaryDark">@color/smeagol_bg</item>
+        <item name="colorAccent">@color/smeagol_accent</item>
+        <item name="android:windowBackground">@color/smeagol_bg</item>
+        <item name="android:textColorPrimary">@color/smeagol_text_primary</item>
+        <item name="android:textColorSecondary">@color/smeagol_text_secondary</item>
+        <item name="android:textColorHint">@color/smeagol_text_secondary</item>
+        <item name="colorSurface">@color/smeagol_surface</item>
+        <item name="colorOnSurface">@color/smeagol_text_primary</item>
+    </style>
+</resources>

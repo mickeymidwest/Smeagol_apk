@@ -1,0 +1,18 @@
+# Build output and Gradle caches -- generated, not source
+.gradle/
+build/
+*/build/
+app/build/
+
+# Local machine config Android Studio generates on first open -- points
+# at YOUR SDK path, never something to commit or share
+local.properties
+
+# Standard IDE noise
+.idea/
+*.iml
+
+# If you generate a real Gradle wrapper locally (see README), the jar
+# itself is fine to commit -- wrapper jars are small and standard
+# practice to check in. Only the machine-specific stuff above is
+# excluded.

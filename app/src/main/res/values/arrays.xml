@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="claude_model_choices">
+        <item>claude-sonnet-5</item>
+        <item>claude-opus-4-8</item>
+        <item>claude-haiku-4-5-20251001</item>
+    </string-array>
+
+    <string-array name="gemini_model_choices">
+        <item>gemini-2.5-flash</item>
+        <item>gemini-3.1-pro</item>
+        <item>gemini-3.5-flash</item>
+    </string-array>
+</resources>
