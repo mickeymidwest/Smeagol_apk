@@ -115,7 +115,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startQrScan() {
         IntentIntegrator(this)
-            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES)
+            .setDesiredBarcodeFormats(listOf(IntentIntegrator.QR_CODE))
             .setPrompt("Scan the pairing code shown by `smeagol serve`")
             .setBeepEnabled(false)
             .initiateScan()
