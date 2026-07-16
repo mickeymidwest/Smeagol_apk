@@ -1,0 +1,66 @@
+name: Desktop CI
+
+# Real verification that this actually works, not just "looks right" --
+# runs on a genuine Ubuntu machine with real dependencies installed.
+# Path-filtered so a pure Android change doesn't trigger this (and
+# android-build.yml is filtered the other way) -- same repo, two
+# independent build pipelines.
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - 'android/**'
+  pull_request:
+    paths-ignore:
+      - 'android/**'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies (CPU prebuilt wheel -- no compiling llama.cpp)
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+      - name: Compile check
+        run: python -m py_compile main.py smeagol_core/*.py smeagol_core/backends/*.py gui/app.py
+
+      - name: Import check (catches missing-dependency issues py_compile alone can't)
+        run: |
+          python -c "
+          import main
+          from smeagol_core import (
+              registry, router, persona, consult, self_improve, script_edit,
+              review, sandbox, server, model_scan, hf_hub, mutation_log,
+              away_sync, process_lock, status,
+          )
+          print('all modules import cleanly')
+          "
+
+      - name: Config actually loads
+        run: |
+          python -c "
+          from smeagol_core.registry import ModelRegistry
+          reg = ModelRegistry.from_yaml('config/models.yaml')
+          print('registry builds:', reg.names())
+          "
+
+      - name: Run test suite
+        run: |
+          if [ -d tests ]; then
+            pytest tests/ -v
+          else
+            echo "no tests/ directory yet -- nothing to run"
+          fi

@@ -1,18 +1,24 @@
-# Build output and Gradle caches -- generated, not source
-.gradle/
-build/
-*/build/
-app/build/
+# Secrets -- never let these into git history
+.env
 
-# Local machine config Android Studio generates on first open -- points
-# at YOUR SDK path, never something to commit or share
-local.properties
+# Generated at runtime, not source
+data/*.jsonl
+data/*.txt
+data/.smeagol.lock
+*.smeagol-backup-*
 
-# Standard IDE noise
-.idea/
-*.iml
+# Downloaded model weights -- large binaries, not source, and can
+# always be re-downloaded via `smeagol models` / `smeagol models --hf`
+models/*.gguf
 
-# If you generate a real Gradle wrapper locally (see README), the jar
-# itself is fine to commit -- wrapper jars are small and standard
-# practice to check in. Only the machine-specific stuff above is
-# excluded.
+# Standard Python/venv noise
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# android/ is part of this same repo now, tracked alongside the
+# desktop files -- only its generated build artifacts are excluded,
+# same as the desktop side's own venv/__pycache__ exclusions above.
+android/.gradle/
+android/**/build/

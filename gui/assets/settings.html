@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0; padding: 16px;
+    background: #0d1512; color: #cfece2;
+    font: 13px/1.5 -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 15px; margin: 0 0 12px; color: #7dffcf; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+       color: #6ea; margin: 18px 0 6px; opacity: 0.8; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 3px 4px; border-bottom: 1px solid rgba(120,255,220,0.08); }
+  .tag { font-size: 10px; color: #4fa; opacity: 0.75; }
+  .persona-field { margin: 2px 0; }
+  .persona-field b { color: #7dffcf; }
+  button {
+    background: rgba(120,255,220,0.08);
+    border: 1px solid rgba(120,255,220,0.3);
+    color: #cfece2;
+    padding: 6px 10px;
+    margin: 4px 6px 4px 0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  button:hover { background: rgba(120,255,220,0.18); }
+  #status-msg { font-size: 11px; opacity: 0.7; margin-top: 8px; min-height: 14px; }
+</style>
+</head>
+<body>
+  <h1>Smeagol</h1>
+  <div id="persona-info"></div>
+
+  <h2>Registered models</h2>
+  <table id="models-table"></table>
+
+  <h2>Actions</h2>
+  <button onclick="launch('chat smeagol')">Chat with Smeagol</button>
+  <button onclick="launch('models')">Add models</button>
+  <button onclick="launch('remove')">Remove models</button>
+  <button onclick="launch('auto-fix')">Auto-fix</button>
+  <div id="status-msg"></div>
+
+<script>
+function renderStatus(status) {
+  const p = document.getElementById('persona-info');
+  p.innerHTML = `
+    <div class="persona-field"><b>Primary:</b> ${status.primary_model}</div>
+    <div class="persona-field"><b>Fallback:</b> ${(status.fallback_models || []).join(', ') || '(none)'}</div>
+    <div class="persona-field"><b>Consult group:</b> ${(status.consult_models || []).join(', ') || '(none)'}</div>
+    <div class="persona-field"><b>Last resort:</b> ${status.last_resort_model || '(none)'}</div>
+  `;
+
+  const table = document.getElementById('models-table');
+  table.innerHTML = status.models.map(m =>
+    `<tr><td>${m.name}</td><td class="tag">${m.type}</td></tr>`
+  ).join('');
+}
+
+function loadStatus() {
+  if (!window.pywebview) return;
+  window.pywebview.api.get_status().then(renderStatus);
+}
+
+function launch(subcommand) {
+  const msg = document.getElementById('status-msg');
+  msg.textContent = 'Opening a terminal...';
+  window.pywebview.api.launch(subcommand).then(result => {
+    msg.textContent = result.ok ? '' : ('Could not open a terminal: ' + result.error);
+  });
+}
+
+window.addEventListener('pywebviewready', loadStatus);
+</script>
+</body>
+</html>

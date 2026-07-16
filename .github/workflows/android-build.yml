@@ -7,16 +7,30 @@ name: Android Build
 # workflow runs on a real GitHub-hosted Ubuntu runner with a real
 # Android SDK and a real Gradle installation, so its result is actual
 # proof, not another layer of "looks right to me."
+#
+# Lives at the repo root (not android/.github/workflows/) because
+# that's the only place GitHub Actions actually looks -- it never scans
+# subfolders for workflow files. Everything below accounts for the
+# Android project itself living in the android/ subfolder rather than
+# at the repo root.
 
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
   pull_request:
-  workflow_dispatch:  # lets you trigger a build manually from the Actions tab
+    paths:
+      - 'android/**'
+  workflow_dispatch:  # lets you trigger a build manually from the Actions tab, regardless of paths
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
 
     steps:
       - name: Checkout
@@ -34,13 +48,13 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses || true
 
-      # No Gradle wrapper jar is committed in this repo (see the root
-      # README for why -- it's a compiled binary I can't safely produce
-      # without a working Gradle installation of my own). setup-gradle
-      # below installs a real Gradle distribution directly onto the
-      # runner, so this workflow uses the `gradle` command rather than
-      # `./gradlew`. If you generate a real wrapper later (see the
-      # README), switching this to `./gradlew` works too.
+      # No Gradle wrapper jar is committed in this repo (see
+      # android/README.md for why -- it's a compiled binary I can't
+      # safely produce without a working Gradle installation of my
+      # own). setup-gradle below installs a real Gradle distribution
+      # directly onto the runner, so this workflow uses the `gradle`
+      # command rather than `./gradlew`. If you generate a real wrapper
+      # later, switching this to `./gradlew` works too.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
@@ -51,5 +65,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smeagol-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
