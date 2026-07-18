@@ -113,6 +113,16 @@ const stage = document.getElementById('stage');
 const prism = document.getElementById('prism');
 const belowZone = document.getElementById('below-zone');
 
+// IS_FRAMED: true when this page is loaded inside desktop's main.html
+// (the hologram sits in an iframe there, with the chat panel below it,
+// so window.pywebview.api isn't necessarily injected into this
+// sub-frame -- postMessage to the parent, which IS the top-level
+// document, instead). Never true on Android, which always loads this
+// file directly -- window.Android calls there are completely
+// unaffected by any of this. Declared early since both the
+// talking-animation and click-routing code below depend on it.
+const IS_FRAMED = window.parent !== window;
+
 // Whether Gremlin is actively generating an answer right now -- drives
 // the animated-mouth branch in drawFace() below. Android pushes this
 // directly via evaluateJavascript (see MainActivity.sendMessage());
@@ -436,22 +446,37 @@ if (window.pywebview) {
 }
 
 // ---- talking-mouth animation: Android sets TALKING directly (no
-// polling needed, see the comment by its declaration above); desktop
-// has no such push channel between the terminal chat and this window,
-// so poll the file-based signal instead. Harmless no-op on Android,
-// where window.pywebview never exists.
+// polling needed, see the comment by its declaration above). Desktop
+// standalone (not framed) polls the file-based signal itself. Desktop
+// framed inside main.html has no window.pywebview of its own (the API
+// is injected into the top-level document, not this sub-frame) -- the
+// parent polls instead and pushes the result in via postMessage, same
+// idea as Android's direct push, just relayed one level.
 function pollTalking() {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.is_talking) {
     window.pywebview.api.is_talking().then(v => { TALKING = !!v; });
   }
 }
-setInterval(pollTalking, 400);
+if (!IS_FRAMED) {
+  setInterval(pollTalking, 400);
+}
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'setTalking') {
+    setTalking(e.data.value);
+  }
+});
 
 // ---- click routing
+function relayToParent(type, extra) {
+  window.parent.postMessage(Object.assign({ source: 'gremlin-hologram', type }, extra || {}), '*');
+}
+
 function openModel(name) {
   if (!name) { openPrimary(); return; }
   if (window.Android && window.Android.openModelSettings) {
     window.Android.openModelSettings(name);
+  } else if (IS_FRAMED) {
+    relayToParent('openModelSettings', { name });
   } else if (window.pywebview) {
     window.pywebview.api.open_model_settings(name);
   }
@@ -459,6 +484,8 @@ function openModel(name) {
 function openPrimary() {
   if (window.Android && window.Android.openSettings) {
     window.Android.openSettings();
+  } else if (IS_FRAMED) {
+    relayToParent('openSettings');
   } else if (window.pywebview) {
     window.pywebview.api.open_settings();
   }
@@ -484,6 +511,8 @@ if (window.Android) {
 document.getElementById('quit-btn').addEventListener('click', () => {
   if (window.Android && window.Android.quit) {
     window.Android.quit();
+  } else if (IS_FRAMED) {
+    relayToParent('quit');
   } else if (window.pywebview) {
     window.pywebview.api.quit();
   }

@@ -3,7 +3,12 @@ package com.gremlin.app
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.method.ScrollingMovementMethod
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.widget.Button
@@ -12,6 +17,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.google.zxing.integration.android.IntentIntegrator
 import com.google.zxing.integration.android.IntentResult
 import java.io.File
@@ -24,6 +30,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var connectionLabel: TextView
     private lateinit var chatLog: TextView
+    private lateinit var thinkingStatus: TextView
     private lateinit var messageInput: EditText
     private lateinit var hologramView: WebView
 
@@ -59,6 +66,7 @@ class MainActivity : AppCompatActivity() {
         if (historyFile.exists()) {
             chatLog.text = historyFile.readText()
         }
+        thinkingStatus = findViewById(R.id.thinking_status)
         messageInput = findViewById(R.id.message_input)
 
         hologramView = findViewById(R.id.hologram_view)
@@ -192,8 +200,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** For plain/system lines (e.g. "(paired with ...)") -- unstyled,
+     * same as always. Chat turns use appendUserTurn/appendAssistantTurn
+     * below instead, which build a styled fragment and pass it through
+     * this same append+persist path. */
     private fun appendToLog(line: String) {
-        chatLog.append(if (chatLog.text.isEmpty()) line else "\n\n$line")
+        appendStyled(line)
+    }
+
+    private fun appendStyled(fragment: CharSequence) {
+        if (chatLog.text.isNotEmpty()) chatLog.append("\n\n")
+        chatLog.append(fragment)
         try {
             historyFile.writeText(chatLog.text.toString())
         } catch (e: Exception) {
@@ -202,11 +219,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Claude-Code-style turn blocks: a `›` prompt glyph in the accent
+    // color for what you typed, plain text for gremlin's reply, and any
+    // source/consult status as a small dim sub-line rather than an
+    // inline suffix -- same visual language as the desktop chat panel
+    // (gui/assets/main.html), reusing the same Theme.Gremlin colors so
+    // both platforms actually look identical, not just similar.
+    private fun appendUserTurn(message: String) {
+        val accent = ContextCompat.getColor(this, R.color.gremlin_accent)
+        val builder = SpannableStringBuilder()
+        val promptStart = builder.length
+        builder.append("› ")
+        builder.setSpan(ForegroundColorSpan(accent), promptStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.append(message)
+        appendStyled(builder)
+    }
+
+    private fun appendAssistantTurn(answer: String, subStatus: String?) {
+        val secondary = ContextCompat.getColor(this, R.color.gremlin_text_secondary)
+        val builder = SpannableStringBuilder()
+        builder.append(answer)
+        if (!subStatus.isNullOrEmpty()) {
+            builder.append("\n")
+            val subStart = builder.length
+            builder.append(subStatus)
+            builder.setSpan(ForegroundColorSpan(secondary), subStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            builder.setSpan(RelativeSizeSpan(0.85f), subStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        appendStyled(builder)
+    }
+
     private fun sendMessage() {
         val message = messageInput.text.toString().trim()
         if (message.isEmpty()) return
 
-        appendToLog("you: $message")
+        appendUserTurn(message)
         messageInput.setText("")
 
         // Pushed directly rather than polled -- unlike the desktop
@@ -215,18 +262,19 @@ class MainActivity : AppCompatActivity() {
         // chat call itself, so there's no need for the file-based
         // signal gremlin_core.consult uses for the desktop case.
         hologramView.evaluateJavascript("setTalking(true)", null)
+        thinkingStatus.visibility = View.VISIBLE
 
         Thread {
             val result = gremlinClient.chat(message)
             runOnUiThread {
-                val sourceTag = when (result.source) {
-                    "desktop" -> ""
-                    "claude" -> "  (standalone, via Claude)"
-                    "gemini" -> "  (standalone, via Gemini)"
-                    else -> ""
+                val subStatus = when (result.source) {
+                    "claude" -> "(standalone, via Claude)"
+                    "gemini" -> "(standalone, via Gemini)"
+                    else -> null
                 }
-                appendToLog("gremlin: ${result.answer}$sourceTag")
+                appendAssistantTurn(result.answer, subStatus)
                 hologramView.evaluateJavascript("setTalking(false)", null)
+                thinkingStatus.visibility = View.GONE
             }
         }.start()
     }

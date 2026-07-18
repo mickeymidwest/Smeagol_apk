@@ -30,9 +30,21 @@
             android:id="@+id/chat_log"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="15sp"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:lineSpacingExtra="3dp"
             android:paddingBottom="8dp" />
     </ScrollView>
+
+    <TextView
+        android:id="@+id/thinking_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="monospace"
+        android:textSize="12sp"
+        android:alpha="0.7"
+        android:text="● gremlin is thinking…"
+        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -45,6 +57,8 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
             android:hint="Ask Gremlin..."
             android:inputType="textCapSentences|textMultiLine"
             android:maxLines="4" />

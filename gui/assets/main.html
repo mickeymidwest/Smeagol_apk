@@ -1,0 +1,208 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #0D1512;
+    --surface: #132019;
+    --accent: #7DFFCF;
+    --text: #CFECE2;
+    --text-dim: #9FD9C8;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    width: 100%; height: 100%;
+    font-family: "SF Mono", Consolas, Menlo, monospace;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  #holo-wrap {
+    height: 220px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(125, 255, 207, 0.15);
+  }
+  #holo-wrap iframe {
+    width: 100%; height: 100%;
+    border: none;
+    background: transparent;
+  }
+  #chat-panel {
+    flex: 1;
+    display: flex; flex-direction: column;
+    min-height: 0;
+    user-select: text;
+  }
+  #turns {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+  }
+  .turn {
+    margin-bottom: 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .turn .prompt { color: var(--accent); }
+  .turn .sub {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.75;
+    margin-top: 2px;
+  }
+  .turn.error .body { color: #ff9d9d; }
+  #thinking {
+    padding: 0 12px 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+    opacity: 0.75;
+    display: none;
+  }
+  #input-row {
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid rgba(125, 255, 207, 0.15);
+  }
+  #message-input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(125, 255, 207, 0.3);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    resize: none;
+  }
+  #send-btn {
+    background: rgba(125, 255, 207, 0.08);
+    border: 1px solid rgba(125, 255, 207, 0.3);
+    color: var(--text);
+    font-family: inherit;
+    padding: 0 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  #send-btn:hover { background: rgba(125, 255, 207, 0.18); }
+</style>
+</head>
+<body>
+  <div id="holo-wrap">
+    <iframe id="holo" src="hologram.html"></iframe>
+  </div>
+  <div id="chat-panel">
+    <div id="turns"></div>
+    <div id="thinking">&#9679; gremlin is thinking&hellip;</div>
+    <div id="input-row">
+      <textarea id="message-input" rows="1" placeholder="Ask Gremlin..."></textarea>
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+
+<script>
+const turnsEl = document.getElementById('turns');
+const thinkingEl = document.getElementById('thinking');
+const inputEl = document.getElementById('message-input');
+const sendBtn = document.getElementById('send-btn');
+const holo = document.getElementById('holo');
+
+function addTurn(role, text, subtext, isError) {
+  const div = document.createElement('div');
+  div.className = 'turn ' + role + (isError ? ' error' : '');
+
+  if (role === 'user') {
+    const prompt = document.createElement('span');
+    prompt.className = 'prompt';
+    prompt.textContent = '› ';
+    div.appendChild(prompt);
+  }
+
+  const body = document.createElement('span');
+  body.className = 'body';
+  body.textContent = text;
+  div.appendChild(body);
+
+  if (subtext) {
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = subtext;
+    div.appendChild(sub);
+  }
+
+  turnsEl.appendChild(div);
+  turnsEl.scrollTop = turnsEl.scrollHeight;
+}
+
+function subtextFor(result) {
+  if (result.error) return null;
+  if (result.from_memory) return '(answered from memory)';
+  if (result.consulted) {
+    if (result.contributors && result.contributors.length) {
+      return '(consulted: ' + result.contributors.join(', ') + ')';
+    }
+    return '(consulted, nobody was confident)';
+  }
+  return null;
+}
+
+async function sendMessage() {
+  const message = inputEl.value.trim();
+  if (!message || !window.pywebview) return;
+  inputEl.value = '';
+  addTurn('user', message);
+
+  thinkingEl.style.display = 'block';
+  try {
+    const result = await window.pywebview.api.chat(message);
+    addTurn('assistant', result.answer || '[empty response]', subtextFor(result), !!result.error);
+  } catch (e) {
+    addTurn('assistant', "Couldn't reach Gremlin: " + e, null, true);
+  } finally {
+    thinkingEl.style.display = 'none';
+  }
+}
+
+sendBtn.addEventListener('click', sendMessage);
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Relay the framed hologram's settings-click messages to the real
+// pywebview bridge -- see hologram.html's IS_FRAMED/relayToParent for
+// the other end of this.
+window.addEventListener('message', (e) => {
+  const data = e.data;
+  if (!data || data.source !== 'gremlin-hologram' || !window.pywebview) return;
+  if (data.type === 'openSettings') {
+    window.pywebview.api.open_settings();
+  } else if (data.type === 'openModelSettings') {
+    window.pywebview.api.open_model_settings(data.name);
+  } else if (data.type === 'quit') {
+    window.pywebview.api.quit();
+  }
+});
+
+// The framed hologram has no window.pywebview.api of its own to poll
+// is_talking() with directly (the API is injected into this top-level
+// document, not the sub-frame) -- poll here and push the result in.
+function pollTalkingIntoHolo() {
+  if (!window.pywebview || !window.pywebview.api.is_talking) return;
+  window.pywebview.api.is_talking().then(v => {
+    holo.contentWindow.postMessage({ type: 'setTalking', value: v }, '*');
+  });
+}
+setInterval(pollTalkingIntoHolo, 400);
+</script>
+</body>
+</html>

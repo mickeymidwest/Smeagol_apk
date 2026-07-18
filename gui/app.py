@@ -1,8 +1,10 @@
 """
-`python gui/app.py` -- a small always-on-top hologram window; click it
-to open a settings panel showing registered models and Gremlin's
-persona config, with buttons that launch existing CLI commands in a
-terminal rather than reimplementing their interactive flows.
+`python gui/app.py` -- the main desktop window: `main.html` (hologram
+up top, a live Claude-Code-style conversation panel below it), plus a
+settings panel (opened from below the hologram) and a per-model
+settings panel (opened from a hologram head-slot), the latter two with
+buttons that launch existing CLI commands in a terminal rather than
+reimplementing their interactive flows.
 
 Requires pywebview (`pip install pywebview`) plus a native web
 rendering backend -- on Manjaro, `sudo pacman -S webkit2gtk-4.1` for
@@ -18,18 +20,22 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
+import requests
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from gremlin_core import consult, model_scan  # noqa: E402
+from gremlin_core import server as server_mod  # noqa: E402
 from gremlin_core.status import get_status_data  # noqa: E402
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 CONFIG_PATH = PROJECT_ROOT / "config" / "models.yaml"
+DATA_DIR = PROJECT_ROOT / "data"
 
 TERMINAL_CANDIDATES = ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"]
 
@@ -127,6 +133,76 @@ class Api:
 
         window.events.loaded += _init
 
+    def _ensure_server(self) -> tuple[str, str]:
+        """Returns (base_url, token) for a `gremlin serve` instance on
+        this machine, starting one in the background if nothing is
+        already answering on it. This is what lets main.html's chat
+        panel work without the user having to run `gremlin serve`
+        themselves first -- the same server the Android app already
+        talks to over LAN, just addressed over localhost here instead."""
+        token = server_mod.get_or_create_token(DATA_DIR)
+        base_url = f"http://127.0.0.1:{server_mod.DEFAULT_PORT}"
+        try:
+            r = requests.get(f"{base_url}/status", headers={"Authorization": f"Bearer {token}"}, timeout=1.5)
+            if r.status_code == 200:
+                return base_url, token
+        except requests.RequestException:
+            pass
+
+        subprocess.Popen(
+            [sys.executable, "main.py", "serve"],
+            cwd=str(PROJECT_ROOT),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return base_url, token
+
+    def _wait_for_server(self, base_url: str, token: str, timeout_s: float = 15.0) -> bool:
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            try:
+                r = requests.get(f"{base_url}/status", headers={"Authorization": f"Bearer {token}"}, timeout=2)
+                if r.status_code == 200:
+                    return True
+            except requests.RequestException:
+                pass
+            time.sleep(0.5)
+        return False
+
+    def chat(self, message: str) -> dict:
+        """Backs main.html's conversation panel -- a thin HTTP client to
+        /chat on a local `gremlin serve` (auto-started via
+        _ensure_server if not already running), not a reimplementation
+        of the answer-generation logic. Same JSON shape consult_and_learn
+        returns (answer/consulted/from_memory/contributors/...), plus
+        "error": True on anything that isn't a clean 200 -- main.html
+        renders that distinctly rather than treating it as a real answer."""
+        base_url, token = self._ensure_server()
+        if not self._wait_for_server(base_url, token):
+            return {
+                "answer": "Couldn't start gremlin serve -- check the terminal gui/app.py "
+                          "was launched from for errors.",
+                "error": True,
+            }
+
+        try:
+            # First message after a cold start may include loading the
+            # primary model -- generous timeout, this is a real
+            # generation call, not a status check.
+            r = requests.post(
+                f"{base_url}/chat",
+                json={"message": message, "token": token},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=180,
+            )
+        except requests.RequestException as e:
+            return {"answer": f"Couldn't reach gremlin serve: {e}", "error": True}
+
+        if r.status_code != 200:
+            detail = (r.json().get("error") if r.headers.get("content-type", "").startswith("application/json") else None) or f"HTTP {r.status_code}"
+            return {"answer": f"[error: {detail}]", "error": True}
+
+        return r.json()
+
     def launch(self, subcommand: str) -> dict:
         terminal = find_terminal()
         if terminal is None:
@@ -159,12 +235,16 @@ def main():
     except (IndexError, AttributeError):
         width, height = 200, 200
 
+    # Not transparent, unlike the old hologram-only window -- the chat
+    # panel below the hologram needs a real, readable background now.
+    # The hologram itself (in its iframe) still renders its own dark/
+    # scanline look, so nothing changes visually up there.
     webview.create_window(
         "Gremlin",
-        str(ASSETS_DIR / "hologram.html"),
+        str(ASSETS_DIR / "main.html"),
         width=width, height=height,
         frameless=True, easy_drag=True, on_top=True,
-        transparent=True, resizable=True,
+        resizable=True,
         js_api=api,
     )
     webview.start()
