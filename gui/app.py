@@ -25,7 +25,7 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from gremlin_core import model_scan  # noqa: E402
+from gremlin_core import consult, model_scan  # noqa: E402
 from gremlin_core.status import get_status_data  # noqa: E402
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -62,6 +62,16 @@ class Api:
 
     def get_status(self) -> dict:
         return get_status_data(CONFIG_PATH)
+
+    def is_talking(self) -> bool:
+        """Polled by hologram.html (~every 400ms) to animate the mouth
+        while Gremlin is actually generating an answer -- see
+        gremlin_core.consult.is_talking for what sets/clears this. Works
+        whether the answer came from this window's own "Chat with
+        Gremlin" terminal or from `gremlin serve` handling a request
+        from the phone, since both funnel through the same
+        consult_and_learn call."""
+        return consult.is_talking(str(PROJECT_ROOT))
 
     def get_model_status(self, name: str) -> dict:
         """One entry from get_status() -- what the per-model settings

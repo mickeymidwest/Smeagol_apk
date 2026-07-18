@@ -113,6 +113,15 @@ const stage = document.getElementById('stage');
 const prism = document.getElementById('prism');
 const belowZone = document.getElementById('below-zone');
 
+// Whether Gremlin is actively generating an answer right now -- drives
+// the animated-mouth branch in drawFace() below. Android pushes this
+// directly via evaluateJavascript (see MainActivity.sendMessage());
+// desktop has no such direct channel (the terminal chat and this
+// window are separate processes), so it's polled from the shared
+// file-based signal instead -- see pollTalking() further down.
+let TALKING = false;
+function setTalking(v) { TALKING = !!v; }
+
 // Original stylized face: NOT any specific copyrighted character's
 // likeness (not the Warner Bros. Gremlins designs, not the film
 // version of anything else) -- generic mischievous-creature/folklore
@@ -220,23 +229,47 @@ function drawFace(ctx, W, H, t) {
     ctx.restore();
   });
 
-  // wide, impish grin with a couple of small pointed teeth
-  ctx.beginPath();
-  ctx.moveTo(cx - 20, cy + 36);
-  ctx.quadraticCurveTo(cx, cy + 46, cx + 20, cy + 34);
-  ctx.globalAlpha = 0.6;
-  ctx.stroke();
-  ctx.globalAlpha = Math.max(0.4, Math.min(1, flicker));
-  [-1, 1].forEach(side => {
+  // mouth: while TALKING (see setTalking() below), an animated
+  // open/close flap in place of the usual static grin -- otherwise the
+  // wide, impish grin with a couple of small pointed teeth, unchanged.
+  if (TALKING) {
+    const openAmt = 0.3 + Math.abs(Math.sin(t / 65)) * 0.7; // fast flap, 0.3..1
     ctx.beginPath();
-    const toothX = cx + side * 9;
-    ctx.moveTo(toothX - 3, cy + 38);
-    ctx.lineTo(toothX, cy + 45);
-    ctx.lineTo(toothX + 3, cy + 38);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(210, 255, 200, 0.7)';
+    ctx.ellipse(cx, cy + 40, 13, 4 + openAmt * 11, 0, 0, Math.PI * 2);
+    ctx.globalAlpha = Math.max(0.4, Math.min(1, flicker));
+    ctx.fillStyle = 'rgba(20, 55, 15, 0.85)';
     ctx.fill();
-  });
+    ctx.stroke();
+    if (openAmt > 0.55) {
+      [-1, 1].forEach(side => {
+        ctx.beginPath();
+        const toothX = cx + side * 8;
+        ctx.moveTo(toothX - 2, cy + 34);
+        ctx.lineTo(toothX, cy + 39);
+        ctx.lineTo(toothX + 2, cy + 34);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(210, 255, 200, 0.6)';
+        ctx.fill();
+      });
+    }
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(cx - 20, cy + 36);
+    ctx.quadraticCurveTo(cx, cy + 46, cx + 20, cy + 34);
+    ctx.globalAlpha = 0.6;
+    ctx.stroke();
+    ctx.globalAlpha = Math.max(0.4, Math.min(1, flicker));
+    [-1, 1].forEach(side => {
+      ctx.beginPath();
+      const toothX = cx + side * 9;
+      ctx.moveTo(toothX - 3, cy + 38);
+      ctx.lineTo(toothX, cy + 45);
+      ctx.lineTo(toothX + 3, cy + 38);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(210, 255, 200, 0.7)';
+      ctx.fill();
+    });
+  }
 
   ctx.restore();
 }
@@ -401,6 +434,18 @@ loadStatus(true);
 if (window.pywebview) {
   window.addEventListener('pywebviewready', () => loadStatus(true));
 }
+
+// ---- talking-mouth animation: Android sets TALKING directly (no
+// polling needed, see the comment by its declaration above); desktop
+// has no such push channel between the terminal chat and this window,
+// so poll the file-based signal instead. Harmless no-op on Android,
+// where window.pywebview never exists.
+function pollTalking() {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.is_talking) {
+    window.pywebview.api.is_talking().then(v => { TALKING = !!v; });
+  }
+}
+setInterval(pollTalking, 400);
 
 // ---- click routing
 function openModel(name) {

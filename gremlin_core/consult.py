@@ -36,10 +36,21 @@ from __future__ import annotations
 import json
 import os
 import time
+from contextlib import contextmanager
 from typing import Optional
 
 from .router import Router
 from . import away_sync
+
+# A file-based "is gremlin currently generating an answer" signal --
+# deliberately just a file, not a socket or shared-memory flag, so any
+# process can read it (the desktop hologram window and `gremlin serve`
+# are separate processes; this is the simplest thing that works across
+# that boundary). Written/removed around the one place both the CLI
+# `chat` command and the server's /chat route actually call to get an
+# answer in Gremlin's own voice -- see consult_and_learn below -- so
+# every real "Gremlin is talking" moment sets it, with nothing to keep
+# in sync at each call site.
 
 UNCERTAINTY_MARKERS = [
     "i don't know", "i do not know", "i'm not sure", "i am not sure",
@@ -96,6 +107,48 @@ def append_learning_log(root: str, entry: dict) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
+def _talking_marker_path(root: str) -> str:
+    return os.path.join(root, "data", "talking.marker")
+
+
+@contextmanager
+def _talking(root: str):
+    """Marks Gremlin as talking for the duration of the wrapped block --
+    best-effort, same "a missed write/cleanup isn't fatal" spirit as the
+    rest of this file's file-based state (learning log, away-sync)."""
+    path = _talking_marker_path(root)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(str(time.time()))
+    except OSError:
+        pass
+    try:
+        yield
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def is_talking(root: str) -> bool:
+    """Read side of the marker -- used by the desktop hologram window
+    (polled) and, indirectly, documents what the Android app gets
+    pushed directly instead (see MainActivity's evaluateJavascript
+    calls, which don't need this at all). A marker older than 60s reads
+    as False -- guards against a hung "talking" hologram forever if a
+    process ever got killed between writing and removing it."""
+    path = _talking_marker_path(root)
+    if not os.path.exists(path):
+        return False
+    try:
+        age = time.time() - os.path.getmtime(path)
+    except OSError:
+        return False
+    return age < 60
+
+
 def _confident_results(results: dict) -> dict:
     """Only the ones that actually succeeded AND don't themselves read
     as uncertain -- a model that answered 'I'm not sure either' still
@@ -120,6 +173,28 @@ def _recent_away_context(root: str, limit: int = 5) -> str:
 
 
 async def consult_and_learn(
+    router: Router,
+    persona_name: str,
+    consult_models: list[str],
+    prompt: str,
+    root: str,
+    last_resort_model: Optional[str] = None,
+) -> dict:
+    """Thin wrapper around _consult_and_learn_inner that marks Gremlin as
+    'talking' (see _talking/is_talking above) for exactly the duration of
+    a real answer -- this is the one place both the CLI `chat` command
+    and the server's /chat route call to get one, so wrapping it here
+    covers every real talking moment with nothing to keep in sync at
+    each call site. See _consult_and_learn_inner's docstring for the
+    actual answer-generation logic."""
+    with _talking(root):
+        return await _consult_and_learn_inner(
+            router, persona_name, consult_models, prompt, root,
+            last_resort_model=last_resort_model,
+        )
+
+
+async def _consult_and_learn_inner(
     router: Router,
     persona_name: str,
     consult_models: list[str],

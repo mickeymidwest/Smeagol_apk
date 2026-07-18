@@ -209,6 +209,13 @@ class MainActivity : AppCompatActivity() {
         appendToLog("you: $message")
         messageInput.setText("")
 
+        // Pushed directly rather than polled -- unlike the desktop
+        // window (a separate process from wherever chat actually
+        // happens), this WebView lives in the same activity as the
+        // chat call itself, so there's no need for the file-based
+        // signal gremlin_core.consult uses for the desktop case.
+        hologramView.evaluateJavascript("setTalking(true)", null)
+
         Thread {
             val result = gremlinClient.chat(message)
             runOnUiThread {
@@ -219,6 +226,7 @@ class MainActivity : AppCompatActivity() {
                     else -> ""
                 }
                 appendToLog("gremlin: ${result.answer}$sourceTag")
+                hologramView.evaluateJavascript("setTalking(false)", null)
             }
         }.start()
     }

@@ -5,6 +5,7 @@
 data/*.jsonl
 data/*.txt
 data/.gremlin.lock
+data/talking.marker
 *.gremlin-backup-*
 
 # Downloaded model weights -- large binaries, not source, and can
