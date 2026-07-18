@@ -76,6 +76,11 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateConnectionLabel()
+        // Best-effort refresh so the hologram's head-slot labels (and
+        // ModelSettingsActivity, opened from one of them) have something
+        // reasonably fresh cached without the WebView itself needing to
+        // do any networking -- see JsBridge.getStatusJson() below.
+        Thread { gremlinClient.fetchStatusRaw() }.start()
     }
 
     private inner class JsBridge {
@@ -88,6 +93,30 @@ class MainActivity : AppCompatActivity() {
                 intent.putExtra("token", prefs.getString("token", null))
                 startActivity(intent)
             }
+        }
+
+        @JavascriptInterface
+        fun openModelSettings(name: String) {
+            runOnUiThread {
+                val intent = Intent(this@MainActivity, ModelSettingsActivity::class.java)
+                intent.putExtra("modelName", name)
+                intent.putExtra("host", prefs.getString("host", null))
+                intent.putExtra("port", prefs.getInt("port", 0))
+                intent.putExtra("token", prefs.getString("token", null))
+                intent.putExtra("adminToken", prefs.getString("admin_token", null))
+                startActivity(intent)
+            }
+        }
+
+        // Synchronous by necessity -- addJavascriptInterface calls block
+        // the WebView's JS thread for their return value, there's no way
+        // to hand back a Promise here. Whatever was last fetched in
+        // onResume (or an empty string if nothing's been paired/fetched
+        // yet) is what the hologram gets; hologram.html already retries
+        // once shortly after load to cover that empty-first-call case.
+        @JavascriptInterface
+        fun getStatusJson(): String {
+            return prefs.getString("cached_status_json", "") ?: ""
         }
 
         @JavascriptInterface

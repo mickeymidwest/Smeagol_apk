@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0; padding: 16px;
+    background: #0d1512; color: #cfece2;
+    font: 13px/1.5 -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 15px; margin: 0 0 12px; color: #7dffcf; word-break: break-word; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+       color: #6ea; margin: 18px 0 6px; opacity: 0.8; }
+  .persona-field { margin: 2px 0; }
+  .persona-field b { color: #7dffcf; }
+  .field-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+  .field-row label { width: 100px; font-size: 11px; color: #9fd9c8; flex-shrink: 0; }
+  .field-row input {
+    flex: 1; min-width: 0;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(120,255,220,0.3);
+    color: #cfece2;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  button {
+    background: rgba(120,255,220,0.08);
+    border: 1px solid rgba(120,255,220,0.3);
+    color: #cfece2;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  button:hover { background: rgba(120,255,220,0.18); }
+  #status-msg { font-size: 11px; opacity: 0.7; margin-top: 10px; min-height: 14px; }
+</style>
+</head>
+<body>
+  <h1 id="title">(loading...)</h1>
+  <div id="info"></div>
+
+  <h2>Edit</h2>
+  <div id="fields"></div>
+  <div id="status-msg"></div>
+
+<script>
+let MODEL_NAME = null;
+// display_name/chat_format/n_gpu_layers/n_ctx -- same allowlist as
+// gremlin_core.model_scan.EDITABLE_FIELDS; model_path is deliberately
+// not here, swapping the actual file stays a `models --hf` job.
+const EDITABLE = ["display_name", "chat_format", "n_gpu_layers", "n_ctx"];
+
+function initModel(name) {
+  MODEL_NAME = name;
+  document.getElementById('title').textContent = name;
+  loadModel();
+}
+
+function loadModel() {
+  if (!window.pywebview || !MODEL_NAME) return;
+  window.pywebview.api.get_model_status(MODEL_NAME).then(renderModel);
+}
+
+function renderModel(m) {
+  const info = document.getElementById('info');
+  if (m.error) {
+    info.innerHTML = `<div class="persona-field">${m.error}</div>`;
+    document.getElementById('fields').innerHTML = '';
+    return;
+  }
+  info.innerHTML = `<div class="persona-field"><b>Type:</b> ${m.type}</div>`;
+
+  const fields = document.getElementById('fields');
+  fields.innerHTML = '';
+  EDITABLE.forEach(field => {
+    if (!(field in m)) return;
+    const row = document.createElement('div');
+    row.className = 'field-row';
+
+    const label = document.createElement('label');
+    label.textContent = field;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = m[field];
+    input.dataset.field = field;
+
+    const button = document.createElement('button');
+    button.textContent = 'Save';
+    button.addEventListener('click', () => saveField(field, input.value));
+
+    row.appendChild(label);
+    row.appendChild(input);
+    row.appendChild(button);
+    fields.appendChild(row);
+  });
+}
+
+function saveField(field, value) {
+  const msg = document.getElementById('status-msg');
+  msg.textContent = 'Saving...';
+  window.pywebview.api.edit_model(MODEL_NAME, field, value).then(result => {
+    msg.textContent = result.message || (result.ok ? 'Saved' : 'Failed');
+    if (result.ok) loadModel();
+  });
+}
+
+// initModel() is called directly (via evaluate_js) once the window has
+// loaded -- but the pywebview.api bridge itself may finish injecting
+// slightly after that, so also retry once pywebviewready fires, in
+// case the very first loadModel() call above found window.pywebview
+// not there yet.
+window.addEventListener('pywebviewready', () => { if (MODEL_NAME) loadModel(); });
+</script>
+</body>
+</html>

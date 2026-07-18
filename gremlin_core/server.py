@@ -34,6 +34,7 @@ from .registry import ModelRegistry
 from .router import Router
 from . import consult
 from . import away_sync
+from . import model_scan
 from . import mutation_log
 from .sandbox import SecureExecutionSandbox
 from .status import get_status_data
@@ -200,6 +201,42 @@ def create_app(
             "timed_out": result.timed_out,
             "ok": result.ok,
         })
+
+    @app.route("/admin/model-edit", methods=["POST"])
+    def admin_model_edit():
+        """A dedicated endpoint rather than routing this through
+        /admin/execute -- that one runs a raw shell command with no
+        knowledge of where this project actually lives on disk (the
+        phone app has no way to know the desktop's install path), and
+        field values would need careful shell-quoting to survive being
+        embedded in a command string. Calling model_scan directly here
+        sidesteps both problems: no shell, no path guessing, same
+        allowlist/validation/rollback as the `model-edit` CLI command."""
+        auth_error = _check_admin_auth()
+        if auth_error:
+            return auth_error
+
+        body = request.get_json(silent=True) or {}
+        name = body.get("name", "").strip()
+        field = body.get("field", "").strip()
+        value = body.get("value", "")
+        if not name or not field:
+            return jsonify({"error": "'name' and 'field' are required"}), 400
+
+        ok, err = model_scan.update_entry_field(str(config_path), name, field, value)
+
+        mutation_log.append_mutation(str(project_root), {
+            "kind": "model_edit",
+            "name": name,
+            "field": field,
+            "value": value,
+            "ok": ok,
+            "error": err,
+        })
+
+        if not ok:
+            return jsonify({"ok": False, "error": err}), 400
+        return jsonify({"ok": True})
 
     @app.route("/admin/reboot", methods=["POST"])
     def admin_reboot():

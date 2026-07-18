@@ -14,6 +14,7 @@ they can be (and are) unit-tested without a display. Only main() itself
 needs an actual windowing system to run.
 """
 from __future__ import annotations
+import json
 import shutil
 import subprocess
 import sys
@@ -57,9 +58,32 @@ def build_launch_command(terminal: str, subcommand: str, project_root: Path = PR
 class Api:
     def __init__(self):
         self._settings_window = None
+        self._model_settings_windows: dict[str, object] = {}
 
     def get_status(self) -> dict:
         return get_status_data(CONFIG_PATH)
+
+    def get_model_status(self, name: str) -> dict:
+        """One entry from get_status() -- what the per-model settings
+        window (opened from a hologram head-slot) renders and edits."""
+        for m in self.get_status().get("models", []):
+            if m["name"] == name:
+                return m
+        return {"name": name, "error": "not found"}
+
+    def edit_model(self, name: str, field: str, value: str) -> dict:
+        """Shells out to `gremlin model-edit` (non-interactive by design,
+        see main.py) rather than touching config/models.yaml directly
+        here -- one code path for the field-editing logic and its
+        validation/rollback, whether triggered from this desktop window
+        or remotely from the Android app's own model-edit call."""
+        result = subprocess.run(
+            [sys.executable, "main.py", "model-edit", name, f"--field={field}", f"--value={value}"],
+            cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+        )
+        message = (result.stdout or result.stderr or "").strip()
+        ok = result.returncode == 0 and not message.startswith("NOT edited:") and "Usage:" not in message
+        return {"ok": ok, "message": message}
 
     def open_settings(self):
         import webview  # imported lazily -- only needed once a display exists
@@ -70,6 +94,28 @@ class Api:
                 str(ASSETS_DIR / "settings.html"),
                 width=420, height=480, resizable=True, js_api=self,
             )
+
+    def open_model_settings(self, name: str):
+        import webview  # imported lazily -- only needed once a display exists
+
+        existing = self._model_settings_windows.get(name)
+        if existing is not None and existing in webview.windows:
+            return
+
+        window = webview.create_window(
+            f"Gremlin -- {name}",
+            str(ASSETS_DIR / "model-settings.html"),
+            width=360, height=360, resizable=True, js_api=self,
+        )
+        self._model_settings_windows[name] = window
+
+        # The page has no way to know which model it's for on its own
+        # (it's the same static file for every model) -- evaluate_js
+        # after load hands it the one piece of state it needs.
+        def _init():
+            window.evaluate_js(f"initModel({json.dumps(name)})")
+
+        window.events.loaded += _init
 
     def launch(self, subcommand: str) -> dict:
         terminal = find_terminal()

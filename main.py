@@ -6,6 +6,11 @@ Usage (after `chmod +x gremlin` and putting it on your PATH):
   gremlin models [directory]     (default: ~/Downloads)
   gremlin models --hf "<search terms>"   -- search & download from Hugging Face
   gremlin remove
+  gremlin model-edit <name> --field=<field> --value=<value>
+    Non-interactive on purpose -- edits one field on one existing model entry
+    in place (fields: display_name, chat_format, n_gpu_layers, n_ctx). This is
+    what the hologram's head-slots trigger remotely via /admin/execute, so it
+    never prompts. Swapping the actual model file stays a `models --hf` job.
   gremlin chat <model_name>
   gremlin broadcast <model1,model2,...> "<prompt>"
   gremlin plan <model1,model2,...> "<task>"
@@ -238,6 +243,28 @@ def cmd_remove():
             config_text = open(CONFIG_PATH).read()  # refresh for subsequent iterations
         else:
             print(f"Did NOT remove {name}: {err}")
+
+
+def cmd_model_edit(name: str, field: Optional[str], value: Optional[str]):
+    """Deliberately non-interactive (no input() prompts) -- unlike the
+    other model-management commands above, this one also needs to work
+    as a single fire-and-forget shell command over the server's
+    /admin/execute endpoint (e.g. triggered from the Android app's
+    hologram head-slots), which has no stdin channel to prompt through."""
+    if not field or not value:
+        print('Usage: gremlin model-edit <name> --field=<field> --value=<value>')
+        print(f"  fields: {sorted(model_scan.EDITABLE_FIELDS)}")
+        return
+
+    config_text = open(CONFIG_PATH).read()
+    entries = {e["name"]: e for e in model_scan.list_all_entries(config_text)}
+    old_value = entries.get(name, {}).get(field, "(unset)") if name in entries else None
+
+    ok, err = model_scan.update_entry_field(CONFIG_PATH, name, field, value)
+    if ok:
+        print(f"'{name}'.{field}: {old_value!r} -> {value!r}")
+    else:
+        print(f"NOT edited: {err}")
 
 
 async def cmd_list(registry: ModelRegistry):
@@ -486,6 +513,20 @@ async def main():
 
     if cmd == "remove":
         cmd_remove()
+        return
+
+    if cmd == "model-edit":
+        if len(sys.argv) < 3:
+            print('Usage: gremlin model-edit <name> --field=<field> --value=<value>')
+            return
+        model_name = sys.argv[2]
+        field = value = None
+        for arg in sys.argv[3:]:
+            if arg.startswith("--field="):
+                field = arg.split("=", 1)[1]
+            elif arg.startswith("--value="):
+                value = arg.split("=", 1)[1]
+        cmd_model_edit(model_name, field, value)
         return
 
     registry = ModelRegistry.from_yaml(CONFIG_PATH)

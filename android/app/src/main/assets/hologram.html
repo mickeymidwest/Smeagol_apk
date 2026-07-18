@@ -8,20 +8,45 @@
     background: transparent;
     width: 100%; height: 100%;
     -webkit-user-select: none; user-select: none;
-    cursor: pointer;
+    display: flex; flex-direction: column;
   }
   #stage {
-    width: 100%; height: 100%;
+    flex: 1;
+    width: 100%;
     display: flex; align-items: center; justify-content: center;
-    perspective: 600px;
+    perspective: 700px;
+    cursor: grab;
+    touch-action: none;
   }
-  #face-wrap {
+  #stage.dragging { cursor: grabbing; }
+  #prism {
+    position: relative;
+    width: 180px; height: 180px;
     transform-style: preserve-3d;
-    transition: transform 0.15s ease-out;
   }
-  canvas {
+  .face {
+    position: absolute; inset: 0;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+  }
+  .face canvas {
     display: block;
     filter: drop-shadow(0 0 12px rgba(150, 255, 90, 0.55));
+  }
+  .face-label {
+    position: absolute; left: 0; right: 0; bottom: 2px;
+    text-align: center;
+    font: 9px/1.2 monospace;
+    letter-spacing: 0.02em;
+    color: rgba(180, 255, 220, 0.65);
+    text-shadow: 0 0 6px rgba(120, 255, 200, 0.5);
+    pointer-events: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #below-zone {
+    height: 22px;
+    width: 100%;
+    cursor: pointer;
   }
   #scanlines {
     position: fixed; inset: 0; pointer-events: none;
@@ -54,24 +79,46 @@
 <body>
   <div id="quit-btn" title="Quit">×</div>
   <div id="stage" class="pywebview-drag-region">
-    <div id="face-wrap">
-      <canvas id="face" width="180" height="180"></canvas>
+    <div id="prism">
+      <div class="face" data-slot="0"><canvas width="180" height="180"></canvas><div class="face-label"></div></div>
+      <div class="face" data-slot="1"><canvas width="180" height="180"></canvas><div class="face-label"></div></div>
+      <div class="face" data-slot="2"><canvas width="180" height="180"></canvas><div class="face-label"></div></div>
+      <div class="face" data-slot="3"><canvas width="180" height="180"></canvas><div class="face-label"></div></div>
     </div>
   </div>
+  <div id="below-zone" title="Gremlin's own settings"></div>
   <div id="scanlines"></div>
 
 <script>
-const canvas = document.getElementById('face');
-const ctx = canvas.getContext('2d');
-const wrap = document.getElementById('face-wrap');
-const W = canvas.width, H = canvas.height;
+// Four faces of a turntable "prism" -- not a literal cube (no top/bottom,
+// just 4 vertical panels 90 degrees apart) -- each one the SAME
+// procedurally-drawn face as before (drawFace, unchanged), tagged with a
+// small label so the 4 local consult models are distinguishable as you
+// spin it. The prism itself (as a whole) is Gremlin's own hologram --
+// tapping any face edits that slot's model; tapping below it (not part
+// of the head at all) edits Gremlin's own primary settings.
+const FACES = Array.from(document.querySelectorAll('.face')).map((el, i) => ({
+  el,
+  canvas: el.querySelector('canvas'),
+  label: el.querySelector('.face-label'),
+  angle: i * 90,          // fixed geometry, faces 90deg apart
+  modelName: null,        // filled in once /status loads
+}));
+FACES.forEach(f => {
+  f.ctx = f.canvas.getContext('2d');
+  f.el.style.transform = `rotateY(${f.angle}deg) translateZ(90px)`;
+});
+
+const stage = document.getElementById('stage');
+const prism = document.getElementById('prism');
+const belowZone = document.getElementById('below-zone');
 
 // Original stylized face: NOT any specific copyrighted character's
 // likeness (not the Warner Bros. Gremlins designs, not the film
 // version of anything else) -- generic mischievous-creature/folklore
 // traits (pointed ears, angular features, impish grin) drawn
 // procedurally, same approach as the rest of this design.
-function drawFace(t) {
+function drawFace(ctx, W, H, t) {
   ctx.clearRect(0, 0, W, H);
 
   const cx = W / 2, cy = H / 2 + 6;
@@ -197,20 +244,190 @@ function drawFace(t) {
 let start = null;
 function tick(ts) {
   if (start === null) start = ts;
-  drawFace(ts - start);
+  const t = ts - start;
+  // Each face offset slightly in phase so all 4 aren't blinking/bobbing
+  // in perfect lockstep -- cheap way to make the whole thing feel less
+  // like 4 copies of one animation.
+  FACES.forEach((f, i) => drawFace(f.ctx, 180, 180, t + i * 401));
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
 
-// idle 3D-ish rotation, plus a little parallax toward the cursor
-let idlePhase = 0;
-function idleRotate() {
-  idlePhase += 0.01;
-  const idleY = Math.sin(idlePhase) * 10;
-  wrap.style.transform = `rotateY(${idleY}deg) rotateX(2deg)`;
-  requestAnimationFrame(idleRotate);
+// ---- rotation: drag-to-spin (any direction around the vertical axis),
+// with momentum on release that decays into a snap to the nearest
+// face-forward angle, and idle auto-rotation that resumes after a
+// few seconds of no interaction. Replaces the old passive wobble.
+let rotY = 0;
+let dragging = false, moved = false;
+let lastX = 0, lastY = 0, lastT = 0, velocity = 0;
+let startX = 0, startY = 0;
+let settleFrame = null, idleFrame = null, idleTimeout = null;
+
+function applyTransform(extraTiltDeg) {
+  prism.style.transform = `rotateX(${extraTiltDeg}deg) rotateY(${rotY}deg)`;
 }
-requestAnimationFrame(idleRotate);
+applyTransform(4);
+
+function stopSettle() {
+  if (settleFrame) { cancelAnimationFrame(settleFrame); settleFrame = null; }
+}
+function stopIdle() {
+  if (idleFrame) { cancelAnimationFrame(idleFrame); idleFrame = null; }
+  if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
+}
+function scheduleIdle() {
+  stopIdle();
+  idleTimeout = setTimeout(() => {
+    function spin() {
+      rotY += 0.15;
+      applyTransform(4);
+      idleFrame = requestAnimationFrame(spin);
+    }
+    idleFrame = requestAnimationFrame(spin);
+  }, 4000);
+}
+
+function momentumThenSnap() {
+  let v = velocity;
+  function step() {
+    if (Math.abs(v) > 0.4) {
+      rotY += v;
+      v *= 0.93;
+      applyTransform(4);
+      settleFrame = requestAnimationFrame(step);
+    } else {
+      const target = Math.round(rotY / 90) * 90;
+      const from = rotY;
+      const dist = target - from;
+      const dur = 260;
+      const t0 = performance.now();
+      function ease(tt) {
+        rotY = from + dist * (1 - Math.pow(1 - tt, 3));
+        applyTransform(4);
+        if (tt < 1) {
+          settleFrame = requestAnimationFrame(() => ease(Math.min(1, (performance.now() - t0) / dur)));
+        } else {
+          rotY = target;
+          applyTransform(4);
+          scheduleIdle();
+        }
+      }
+      ease(0);
+    }
+  }
+  settleFrame = requestAnimationFrame(step);
+}
+
+stage.addEventListener('pointerdown', (e) => {
+  dragging = true; moved = false;
+  startX = lastX = e.clientX; startY = e.clientY; lastT = performance.now();
+  velocity = 0;
+  stage.classList.add('dragging');
+  stage.setPointerCapture(e.pointerId);
+  stopSettle(); stopIdle();
+});
+
+stage.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX;
+  if (Math.abs(e.clientX - startX) > 4 || Math.abs(e.clientY - startY) > 4) moved = true;
+  const now = performance.now();
+  const dt = Math.max(1, now - lastT);
+  rotY += dx * 0.6;
+  velocity = (dx * 0.6) / (dt / 16.7); // deg per ~frame, roughly
+  applyTransform(4);
+  lastX = e.clientX; lastY = e.clientY; lastT = now;
+});
+
+stage.addEventListener('pointerup', (e) => {
+  if (!dragging) return;
+  dragging = false;
+  stage.classList.remove('dragging');
+  if (!moved) {
+    handleTap();
+    scheduleIdle();
+  } else {
+    momentumThenSnap();
+  }
+});
+stage.addEventListener('pointercancel', () => {
+  dragging = false;
+  stage.classList.remove('dragging');
+  scheduleIdle();
+});
+
+scheduleIdle();
+
+// ---- model data: which of the 4 faces is which consult model, fetched
+// once from /status (desktop: pywebview bridge already used by
+// settings.html; Android: a synchronous bridge method that returns
+// whatever the app last fetched, since addJavascriptInterface calls
+// can't return a Promise). Retried once in case the first call lands
+// before the host has any status cached yet.
+function fetchStatus() {
+  if (window.Android && window.Android.getStatusJson) {
+    try {
+      const raw = window.Android.getStatusJson();
+      return Promise.resolve(raw ? JSON.parse(raw) : null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  } else if (window.pywebview) {
+    return window.pywebview.api.get_status();
+  }
+  return Promise.resolve(null);
+}
+
+function applyStatus(status) {
+  if (!status || !Array.isArray(status.consult_models) || status.consult_models.length === 0) return;
+  const byName = {};
+  (status.models || []).forEach(m => { byName[m.name] = m; });
+  status.consult_models.slice(0, 4).forEach((name, i) => {
+    FACES[i].modelName = name;
+    const info = byName[name];
+    FACES[i].label.textContent = (info && info.display_name) ? info.display_name.split(' ')[0] : name;
+  });
+}
+
+function loadStatus(retry) {
+  fetchStatus().then(status => {
+    applyStatus(status);
+    if (retry && (!status || !status.consult_models || !status.consult_models.length)) {
+      setTimeout(() => loadStatus(false), 1500);
+    }
+  });
+}
+loadStatus(true);
+if (window.pywebview) {
+  window.addEventListener('pywebviewready', () => loadStatus(true));
+}
+
+// ---- click routing
+function openModel(name) {
+  if (!name) { openPrimary(); return; }
+  if (window.Android && window.Android.openModelSettings) {
+    window.Android.openModelSettings(name);
+  } else if (window.pywebview) {
+    window.pywebview.api.open_model_settings(name);
+  }
+}
+function openPrimary() {
+  if (window.Android && window.Android.openSettings) {
+    window.Android.openSettings();
+  } else if (window.pywebview) {
+    window.pywebview.api.open_settings();
+  }
+}
+
+function handleTap() {
+  // Whichever face is currently closest to facing the viewer (rotY is
+  // always a multiple of 90 at rest) is the one being "picked."
+  const normalized = ((Math.round(rotY / 90) % 4) + 4) % 4;
+  const frontIndex = (4 - normalized) % 4; // faces[i] sits at angle i*90; facing viewer when i*90 + rotY == 0 (mod 360)
+  openModel(FACES[frontIndex].modelName);
+}
+
+belowZone.addEventListener('click', () => openPrimary());
 
 // The in-page quit control is a desktop convention (frameless window,
 // no OS chrome to close it with) -- doesn't apply on Android, where
@@ -218,15 +435,6 @@ requestAnimationFrame(idleRotate);
 if (window.Android) {
   document.getElementById('quit-btn').style.display = 'none';
 }
-
-document.getElementById('stage').addEventListener('click', (e) => {
-  if (e.target.id === 'quit-btn') return;
-  if (window.Android && window.Android.openSettings) {
-    window.Android.openSettings();       // Android WebView bridge
-  } else if (window.pywebview) {
-    window.pywebview.api.open_settings(); // desktop pywebview bridge
-  }
-});
 
 document.getElementById('quit-btn').addEventListener('click', () => {
   if (window.Android && window.Android.quit) {

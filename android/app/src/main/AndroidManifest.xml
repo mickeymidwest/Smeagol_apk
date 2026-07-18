@@ -44,5 +44,10 @@
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="Gremlin Settings" />
+
+        <activity
+            android:name=".ModelSettingsActivity"
+            android:exported="false"
+            android:label="Model Settings" />
     </application>
 </manifest>

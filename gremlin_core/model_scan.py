@@ -210,3 +210,81 @@ def insert_entries(config_path: str, entries: list[str]) -> None:
         new_text = text.rstrip("\n") + "\n\n" + combined
 
     path.write_text(new_text)
+
+
+# Only these are safe to edit in place from a hologram head-slot or a
+# remote `model-edit` call -- everything else (name, type, model_path)
+# either identifies the entry or points at an actual file on disk, and
+# a bad edit there should go through the guided `models`/`models --hf`
+# flow instead, not a raw text swap.
+EDITABLE_FIELDS = {"display_name", "chat_format", "n_gpu_layers", "n_ctx"}
+_INT_FIELDS = {"n_gpu_layers", "n_ctx"}
+
+
+def _find_block_span(text: str, name: str) -> Optional[tuple[int, int]]:
+    """Same block boundary used by remove_entry -- one model's `- name:`
+    line up to (not including) the next entry, `persona:`, or EOF."""
+    pattern = re.compile(
+        rf"^  - name: {re.escape(name)}\b.*?(?=^  - name: |^persona:|^\S|\Z)",
+        re.DOTALL | re.MULTILINE,
+    )
+    match = pattern.search(text)
+    if not match:
+        return None
+    return match.start(), match.end()
+
+
+def update_entry_field(config_path: str, name: str, field: str, value: str) -> tuple[bool, Optional[str]]:
+    """Edits exactly one field on exactly one model's block, in place --
+    same targeted-text-surgery approach as remove_entry/add_to_flow_list,
+    so every other line (including comments) is left untouched. Rejects
+    anything outside EDITABLE_FIELDS outright. Validates the result by
+    rebuilding the registry afterward, restoring the original file if
+    that fails (same rollback pattern as remove_model_and_clean_persona).
+    Returns (True, None) on success, (False, reason) otherwise.
+    """
+    from .registry import ModelRegistry
+
+    if field not in EDITABLE_FIELDS:
+        return False, f"'{field}' isn't editable here -- only {sorted(EDITABLE_FIELDS)} are"
+
+    path = Path(config_path)
+    backup_text = path.read_text()
+
+    span = _find_block_span(backup_text, name)
+    if span is None:
+        return False, f"no model named '{name}' found"
+    start, end = span
+    block = backup_text[start:end]
+
+    line_pattern = re.compile(rf"^(    {re.escape(field)}:\s*)(\S.*?)(\s*#.*)?$", re.MULTILINE)
+    line_match = line_pattern.search(block)
+    if line_match is None:
+        return False, f"'{name}' has no existing '{field}' field to edit"
+
+    if field in _INT_FIELDS:
+        try:
+            int(value)
+        except ValueError:
+            return False, f"'{field}' must be an integer, got {value!r}"
+        new_value_text = value
+    else:
+        # Quote strings the same way the rest of this file already does
+        # (build_entry_block quotes display_name unconditionally) --
+        # escape any embedded double quotes rather than rejecting them.
+        escaped = value.replace('"', '\\"')
+        new_value_text = f'"{escaped}"'
+
+    prefix, _old_value, comment = line_match.group(1), line_match.group(2), line_match.group(3) or ""
+    new_line = f"{prefix}{new_value_text}{comment}"
+    new_block = block[:line_match.start()] + new_line + block[line_match.end():]
+    new_text = backup_text[:start] + new_block + backup_text[end:]
+
+    path.write_text(new_text)
+    try:
+        ModelRegistry.from_yaml(config_path)
+    except Exception as e:
+        path.write_text(backup_text)
+        return False, f"edit would have broken the config, restored original: {e}"
+
+    return True, None

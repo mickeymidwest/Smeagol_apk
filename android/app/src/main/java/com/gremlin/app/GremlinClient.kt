@@ -148,6 +148,36 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
         }
     }
 
+    /**
+     * Fetches the full /status body (not just system_prompt, unlike
+     * refreshCachedPersonaVoice) and caches it in prefs -- this is what
+     * the hologram's getStatusJson() bridge call reads to label its 4
+     * head-slots, and what ModelSettingsActivity reads to show a
+     * model's current field values. Best-effort: returns null and
+     * leaves any previously cached value in place on failure, same
+     * "stale is better than blank" approach as the persona-voice cache.
+     */
+    fun fetchStatusRaw(): String? {
+        val host = prefs.getString("host", null)
+        val port = prefs.getInt("port", 0)
+        val token = prefs.getString("token", null)
+        if (host == null || port == 0 || token == null) return null
+
+        return try {
+            val url = URL("http://$host:$port/status")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.connectTimeout = 4_000
+            connection.readTimeout = 8_000
+            val text = connection.inputStream.bufferedReader().use { it.readText() }
+            prefs.edit().putString("cached_status_json", text).apply()
+            text
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun refreshCachedPersonaVoice(host: String, port: Int, token: String) {
         try {
             val url = URL("http://$host:$port/status")
