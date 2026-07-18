@@ -7,7 +7,22 @@ Gremlin's own source code, which get validated and applied automatically.
 
 ## Setup on Manjaro
 
-**Starting from nothing on a fresh machine** (nothing cloned yet):
+**The all-in-one option, including headless/no-monitor setup:**
+```bash
+curl -O https://raw.githubusercontent.com/<you>/<repo>/main/install-all.sh
+bash install-all.sh https://github.com/<you>/<repo>.git
+```
+Installs git itself if it's missing, clones the repo, runs the base
+setup below, then (each independently skippable) sets up BTRFS
+snapshots + `grub-btrfs` for remote rollback, disables KDE Plasma's
+sleep/lock-screen/login-screen so the machine never strands itself
+waiting for someone to physically sit down at it, caches a sudo
+password for running root commands remotely, and installs `gremlin
+serve` as an auto-starting systemd service. See "Root commands and
+rolling back if something breaks" and "Auto-start on boot" below for
+what each of those actually does.
+
+**Starting from nothing, without the headless extras** (nothing cloned yet):
 ```bash
 curl -O https://raw.githubusercontent.com/<you>/<repo>/main/bootstrap.sh
 bash bootstrap.sh https://github.com/<you>/<repo>.git
@@ -562,10 +577,43 @@ Add this line (replace `yourusername`):
 yourusername ALL=(root) NOPASSWD: /usr/bin/systemctl reboot
 ```
 
+## Root commands and rolling back if something breaks (no monitor needed)
+
+Beyond `/admin/execute`'s normal sandboxed commands, you can run
+anything that actually needs `sudo` -- and roll the whole machine back
+to an earlier snapshot -- without ever plugging a monitor back in.
+
+**Cache a sudo password locally, once, on the desktop itself.** It's
+verified against real `sudo` before being saved, and it never travels
+over the network -- the phone only ever sends "run this as root",
+authorized by the same admin token as everything else above:
+
+```bash
+gremlin set-sudo-password      # gremlin clear-sudo-password to remove it
+```
+
+Then, from the chat panel (desktop or phone -- same slash commands on
+both):
+- `/root <command>` -- runs `<command>` with `sudo`, using the cached
+  password.
+- `/snapshots` -- lists BTRFS snapshots (requires `snapper`, set up by
+  `install-all.sh` below).
+- `/rollback <number>` then `/rollback <number> confirm` -- rolls the
+  root filesystem back to that snapshot and reboots. This is the real,
+  remotely-triggerable equivalent of picking an older entry from the
+  GRUB menu -- GRUB itself runs before Linux even starts, so nothing
+  running on the OS can display or drive it remotely without special
+  hardware (IPMI/KVM-over-IP) most desktops don't have. `snapper
+  rollback` sidesteps that: it swaps which subvolume boots next time,
+  no GRUB interaction needed.
+
+Equivalent CLI commands (same thing, run locally): `gremlin
+list-snapshots`, `gremlin rollback-to <number>`.
+
 ## Auto-start on boot (no monitor needed)
 
-So the server comes back up on its own after a reboot -- or after a
-power blip -- without anyone logging in or opening a terminal:
+`install-all.sh` (below) sets this up for you automatically, as a
+`systemd --user` service. To do it by hand instead:
 
 ```bash
 sudo cp deploy/gremlin.service /etc/systemd/system/gremlin.service

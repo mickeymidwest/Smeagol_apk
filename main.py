@@ -23,6 +23,12 @@ Usage (after `chmod +x gremlin` and putting it on your PATH):
   gremlin edit <path> ["<problem description>"]
   gremlin serve [port]           (default: 8765) -- lets the phone app connect
   gremlin admin-token             -- reveal the separate admin token (system commands, reboot)
+  gremlin set-sudo-password       -- cache a sudo password locally so root commands can run
+    remotely (phone or desktop chat) without a monitor. Verified against real sudo before
+    being cached; never sent over the network. (also: gremlin clear-sudo-password)
+  gremlin list-snapshots          -- list BTRFS snapshots (via snapper)
+  gremlin rollback-to <number>    -- roll back to a snapshot and reboot (requires sudo
+    password cached via set-sudo-password)
 
 Or directly: python main.py <command> ...
 """
@@ -40,6 +46,8 @@ from gremlin_core import model_scan
 from gremlin_core import script_edit
 from gremlin_core import server
 from gremlin_core import hf_hub
+from gremlin_core import root_exec
+from gremlin_core import snapshots as snapshots_mod
 from gremlin_core.process_lock import git_mutation_lock, AlreadyRunning
 
 try:
@@ -265,6 +273,46 @@ def cmd_model_edit(name: str, field: Optional[str], value: Optional[str]):
         print(f"'{name}'.{field}: {old_value!r} -> {value!r}")
     else:
         print(f"NOT edited: {err}")
+
+
+async def cmd_set_sudo_password():
+    import getpass
+    password = getpass.getpass(
+        "Desktop sudo password (verified against real sudo, cached locally only, "
+        "never sent over the network): "
+    )
+    if not password:
+        print("Cancelled -- nothing entered.")
+        return
+    ok, message = await root_exec.set_sudo_password(PROJECT_ROOT, password)
+    print(message if ok else f"NOT saved: {message}")
+
+
+def cmd_clear_sudo_password():
+    root_exec.clear_sudo_password(PROJECT_ROOT)
+    print("Cleared the cached sudo password.")
+
+
+async def cmd_list_snapshots():
+    ok, result = await snapshots_mod.list_snapshots(PROJECT_ROOT)
+    if not ok:
+        print(f"Couldn't list snapshots: {result}")
+        return
+    if not result:
+        print("No snapshots found.")
+        return
+    for s in result:
+        print(f"  {s['number']}  {s['date']}  {s['description']}")
+
+
+async def cmd_rollback_to(number: str, skip_confirm: bool = False):
+    if not skip_confirm:
+        confirm = input(f"Roll back to snapshot {number} and reboot NOW? (y/N): ").strip().lower()
+        if confirm != "y":
+            print("Cancelled.")
+            return
+    ok, message = await snapshots_mod.rollback_to(number, PROJECT_ROOT)
+    print(message)
 
 
 async def cmd_list(registry: ModelRegistry):
@@ -527,6 +575,25 @@ async def main():
             elif arg.startswith("--value="):
                 value = arg.split("=", 1)[1]
         cmd_model_edit(model_name, field, value)
+        return
+
+    if cmd == "set-sudo-password":
+        await cmd_set_sudo_password()
+        return
+
+    if cmd == "clear-sudo-password":
+        cmd_clear_sudo_password()
+        return
+
+    if cmd == "list-snapshots":
+        await cmd_list_snapshots()
+        return
+
+    if cmd == "rollback-to":
+        if len(sys.argv) < 3:
+            print("Usage: gremlin rollback-to <number>")
+            return
+        await cmd_rollback_to(sys.argv[2])
         return
 
     registry = ModelRegistry.from_yaml(CONFIG_PATH)

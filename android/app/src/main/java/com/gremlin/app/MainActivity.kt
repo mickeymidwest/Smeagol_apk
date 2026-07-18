@@ -253,6 +253,12 @@ class MainActivity : AppCompatActivity() {
         val message = messageInput.text.toString().trim()
         if (message.isEmpty()) return
 
+        if (message.startsWith("/")) {
+            messageInput.setText("")
+            handleSlashCommand(message)
+            return
+        }
+
         appendUserTurn(message)
         messageInput.setText("")
 
@@ -277,5 +283,66 @@ class MainActivity : AppCompatActivity() {
                 thinkingStatus.visibility = View.GONE
             }
         }.start()
+    }
+
+    /** Slash commands are intercepted before the normal chat path --
+     * /snapshots and /root talk to the desktop's admin-token-gated
+     * routes via GremlinClient, rendered as a visually distinct
+     * "system" turn (see appendSystemTurn), same split as the desktop
+     * chat panel (gui/assets/main.html's handleSlashCommand). */
+    private fun handleSlashCommand(message: String) {
+        appendUserTurn(message)
+        val parts = message.trim().split(Regex("\\s+"))
+        val cmd = parts.getOrNull(0) ?: ""
+
+        when (cmd) {
+            "/snapshots" -> runAdminSlash { gremlinClient.listSnapshots() }
+
+            "/rollback" -> {
+                val number = parts.getOrNull(1)
+                val confirmed = parts.getOrNull(2) == "confirm"
+                if (number == null) {
+                    appendSystemTurn("Usage: /rollback <number>  (then /rollback <number> confirm to actually do it)", true)
+                } else if (!confirmed) {
+                    appendSystemTurn(
+                        "This rolls back to snapshot $number AND REBOOTS the desktop. " +
+                            "Type \"/rollback $number confirm\" to proceed.",
+                        false,
+                    )
+                } else {
+                    runAdminSlash { gremlinClient.rollback(number) }
+                }
+            }
+
+            "/root" -> {
+                val command = message.removePrefix("/root").trim()
+                if (command.isEmpty()) {
+                    appendSystemTurn("Usage: /root <command>", true)
+                } else {
+                    runAdminSlash { gremlinClient.runAsRoot(command) }
+                }
+            }
+
+            else -> appendSystemTurn("Unknown command: $cmd\nAvailable: /snapshots, /rollback <number>, /root <command>", true)
+        }
+    }
+
+    private fun runAdminSlash(call: () -> AdminResult) {
+        thinkingStatus.visibility = View.VISIBLE
+        Thread {
+            val result = call()
+            runOnUiThread {
+                appendSystemTurn(result.message, !result.ok)
+                thinkingStatus.visibility = View.GONE
+            }
+        }.start()
+    }
+
+    private fun appendSystemTurn(text: String, isError: Boolean) {
+        val color = ContextCompat.getColor(this, if (isError) R.color.gremlin_error else R.color.gremlin_system)
+        val builder = SpannableStringBuilder()
+        builder.append(text)
+        builder.setSpan(ForegroundColorSpan(color), 0, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        appendStyled(builder)
     }
 }

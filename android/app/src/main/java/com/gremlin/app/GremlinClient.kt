@@ -24,6 +24,12 @@ import java.net.URL
  */
 data class ChatResult(val answer: String, val source: String)
 
+/** Result of an admin-token-gated call (slash commands in
+ * MainActivity) -- deliberately the same (ok, message) shape for
+ * /root, /snapshots, and /rollback so sendMessage() can render all
+ * three through one appendSystemTurn call. */
+data class AdminResult(val ok: Boolean, val message: String)
+
 class GremlinClient(private val prefs: SharedPreferences, private val appContext: Context) {
 
     // Short connect timeout for the desktop attempt -- on the home LAN
@@ -193,6 +199,117 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
             // best-effort only -- an away-mode chat still works with
             // whatever was cached last, or with no persona flavor at all
         }
+    }
+
+    /** Backs the `/root <command>` slash command -- runs on the desktop
+     * via the cached local sudo password (root_exec.run_as_root), never
+     * prompting or sending a password from the phone. Same admin-token
+     * gating as the Settings screen's existing admin command box. */
+    fun runAsRoot(command: String): AdminResult {
+        val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
+        return try {
+            val url = URL("http://$host:$port/admin/execute")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Admin-Token", adminToken)
+            connection.doOutput = true
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 130_000
+
+            val body = JSONObject().apply { put("command", command); put("as_root", true) }
+            OutputStreamWriter(connection.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val json = JSONObject(stream.bufferedReader().use { it.readText() })
+
+            if (responseCode !in 200..299) {
+                AdminResult(false, json.optString("error", "HTTP $responseCode"))
+            } else {
+                val text = "exit ${json.optInt("exit_code")}\n${json.optString("stdout")}\n${json.optString("stderr")}".trim()
+                AdminResult(json.optBoolean("ok"), text)
+            }
+        } catch (e: Exception) {
+            AdminResult(false, "Couldn't reach desktop: ${e.message}")
+        }
+    }
+
+    /** Backs the `/snapshots` slash command. */
+    fun listSnapshots(): AdminResult {
+        val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
+        return try {
+            val url = URL("http://$host:$port/admin/snapshots")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("X-Admin-Token", adminToken)
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 30_000
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val json = JSONObject(stream.bufferedReader().use { it.readText() })
+
+            if (responseCode !in 200..299 || !json.optBoolean("ok")) {
+                AdminResult(false, json.optString("error", "HTTP $responseCode"))
+            } else {
+                val snapshots = json.optJSONArray("snapshots")
+                if (snapshots == null || snapshots.length() == 0) {
+                    AdminResult(true, "No snapshots found.")
+                } else {
+                    val lines = (0 until snapshots.length()).joinToString("\n") { i ->
+                        val s = snapshots.getJSONObject(i)
+                        "  ${s.optString("number")}  ${s.optString("date")}  ${s.optString("description")}"
+                    }
+                    AdminResult(true, lines)
+                }
+            }
+        } catch (e: Exception) {
+            AdminResult(false, "Couldn't reach desktop: ${e.message}")
+        }
+    }
+
+    /** Backs the `/rollback <number> confirm` slash command -- stages
+     * the BTRFS rollback and reboots the desktop, per snapshots.rollback_to. */
+    fun rollback(number: String): AdminResult {
+        val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
+        return try {
+            val url = URL("http://$host:$port/admin/rollback")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Admin-Token", adminToken)
+            connection.doOutput = true
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 90_000
+
+            val body = JSONObject().apply { put("number", number) }
+            OutputStreamWriter(connection.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val json = JSONObject(stream.bufferedReader().use { it.readText() })
+
+            val ok = responseCode in 200..299 && json.optBoolean("ok")
+            AdminResult(ok, json.optString(if (ok) "message" else "error", "HTTP $responseCode"))
+        } catch (e: Exception) {
+            AdminResult(false, "Couldn't reach desktop: ${e.message}")
+        }
+    }
+
+    private fun adminCreds(): Triple<String, Int, String>? {
+        val host = prefs.getString("host", null)
+        val port = prefs.getInt("port", 0)
+        val adminToken = prefs.getString("admin_token", null)
+        if (host == null || port == 0 || adminToken.isNullOrBlank()) return null
+        return Triple(host, port, adminToken)
+    }
+
+    private fun adminCredsError(): String {
+        val host = prefs.getString("host", null)
+        val port = prefs.getInt("port", 0)
+        if (host == null || port == 0) return "Not paired with a desktop"
+        return "Set the admin token in Settings first"
     }
 
     private fun postToDesktop(host: String, port: Int, token: String, message: String, pendingSync: JSONArray? = null): String {

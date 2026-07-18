@@ -26,6 +26,7 @@ import os
 import shlex
 import subprocess
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -45,12 +46,17 @@ class SecureExecutionSandbox:
         self.workspace = os.path.abspath(workspace_dir)
         self.timeout = timeout_seconds
 
-    async def run_safe_command(self, command_str: str) -> SandboxResult:
+    async def run_safe_command(self, command_str: str, stdin_data: Optional[bytes] = None) -> SandboxResult:
         """Executes a command with its cwd confined to the workspace and
         a minimal PATH. Never raises -- any failure (bad command, missing
         binary, timeout) comes back as a SandboxResult with exit_code=-1
         rather than an exception, so a caller can always just check
-        `.ok` instead of wrapping every call in try/except."""
+        `.ok` instead of wrapping every call in try/except.
+
+        `stdin_data`, when given, is piped to the subprocess -- e.g. a
+        sudo password fed via `sudo -S`, so it never appears on the
+        command line (and therefore never in a process listing or in
+        mutation_log, which only ever records the command string)."""
         try:
             parsed_cmd = shlex.split(command_str)
         except ValueError as e:
@@ -63,6 +69,7 @@ class SecureExecutionSandbox:
             proc = await asyncio.create_subprocess_exec(
                 *parsed_cmd,
                 cwd=self.workspace,
+                stdin=subprocess.PIPE if stdin_data is not None else None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env={**os.environ, "PATH": "/usr/bin:/bin"},
@@ -72,7 +79,7 @@ class SecureExecutionSandbox:
             return SandboxResult(stdout="", stderr=str(e), exit_code=-1, timed_out=False)
 
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.timeout)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(input=stdin_data), timeout=self.timeout)
             return SandboxResult(
                 stdout=stdout.decode(errors="replace").strip(),
                 stderr=stderr.decode(errors="replace").strip(),

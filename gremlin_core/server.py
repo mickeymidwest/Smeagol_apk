@@ -36,6 +36,8 @@ from . import consult
 from . import away_sync
 from . import model_scan
 from . import mutation_log
+from . import root_exec
+from . import snapshots as snapshots_mod
 from .sandbox import SecureExecutionSandbox
 from .status import get_status_data
 
@@ -180,15 +182,27 @@ def create_app(
         command = body.get("command", "").strip()
         if not command:
             return jsonify({"error": "empty command"}), 400
+        as_root = bool(body.get("as_root"))
         workspace_dir = body.get("workspace_dir") or str(Path.home())
         timeout = min(int(body.get("timeout", 120)), 600)  # hard cap regardless of what's requested
 
-        sandbox = SecureExecutionSandbox(workspace_dir, timeout_seconds=timeout)
-        result = run_coro(loop, sandbox.run_safe_command(command), timeout=timeout + 10)
+        # as_root uses root_exec's cached local sudo password (see
+        # gremlin_core.root_exec) -- the password itself never travels
+        # over the network, only "run this as root" does, same as every
+        # other admin action already gated by the admin token. Ignores
+        # the caller's workspace_dir in that case: root_exec always runs
+        # from the project root, since none of what root commands are
+        # actually for (system administration) depends on cwd.
+        if as_root:
+            result = run_coro(loop, root_exec.run_as_root(command, str(project_root), timeout=timeout), timeout=timeout + 10)
+        else:
+            sandbox = SecureExecutionSandbox(workspace_dir, timeout_seconds=timeout)
+            result = run_coro(loop, sandbox.run_safe_command(command), timeout=timeout + 10)
 
         mutation_log.append_mutation(str(project_root), {
             "kind": "admin_command",
             "command": command,
+            "as_root": as_root,
             "workspace_dir": workspace_dir,
             "exit_code": result.exit_code,
             "timed_out": result.timed_out,
@@ -201,6 +215,46 @@ def create_app(
             "timed_out": result.timed_out,
             "ok": result.ok,
         })
+
+    @app.route("/admin/snapshots", methods=["GET"])
+    def admin_snapshots():
+        auth_error = _check_admin_auth()
+        if auth_error:
+            return auth_error
+
+        ok, result = run_coro(loop, snapshots_mod.list_snapshots(str(project_root)), timeout=30)
+        if not ok:
+            return jsonify({"ok": False, "error": result}), 400
+        return jsonify({"ok": True, "snapshots": result})
+
+    @app.route("/admin/rollback", methods=["POST"])
+    def admin_rollback():
+        """Separate from /admin/execute on purpose, same reasoning as
+        /admin/model-edit: this is consequential enough (stages a
+        rollback, then reboots) to want structured input -- a bare
+        snapshot number -- rather than the caller composing a shell
+        command for it."""
+        auth_error = _check_admin_auth()
+        if auth_error:
+            return auth_error
+
+        body = request.get_json(silent=True) or {}
+        number = str(body.get("number", "")).strip()
+        if not number:
+            return jsonify({"ok": False, "error": "'number' is required"}), 400
+
+        ok, message = run_coro(loop, snapshots_mod.rollback_to(number, str(project_root)), timeout=90)
+
+        mutation_log.append_mutation(str(project_root), {
+            "kind": "snapshot_rollback",
+            "number": number,
+            "ok": ok,
+            "message": message,
+        })
+
+        if not ok:
+            return jsonify({"ok": False, "error": message}), 400
+        return jsonify({"ok": True, "message": message})
 
     @app.route("/admin/model-edit", methods=["POST"])
     def admin_model_edit():

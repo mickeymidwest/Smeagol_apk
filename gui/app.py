@@ -16,6 +16,7 @@ they can be (and are) unit-tested without a display. Only main() itself
 needs an actual windowing system to run.
 """
 from __future__ import annotations
+import asyncio
 import json
 import shutil
 import subprocess
@@ -30,7 +31,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from gremlin_core import consult, model_scan  # noqa: E402
+from gremlin_core import root_exec  # noqa: E402
 from gremlin_core import server as server_mod  # noqa: E402
+from gremlin_core import snapshots as snapshots_mod  # noqa: E402
 from gremlin_core.status import get_status_data  # noqa: E402
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -202,6 +205,28 @@ class Api:
             return {"answer": f"[error: {detail}]", "error": True}
 
         return r.json()
+
+    def list_snapshots(self) -> dict:
+        """Backs main.html's `/snapshots` slash command -- calls
+        gremlin_core.snapshots directly rather than over HTTP, since
+        this desktop window already has direct access to the project."""
+        ok, result = asyncio.run(snapshots_mod.list_snapshots(str(PROJECT_ROOT)))
+        return {"ok": ok, "result": result}
+
+    def rollback_to(self, number: str) -> dict:
+        """Backs main.html's `/rollback <number> confirm` slash command."""
+        ok, message = asyncio.run(snapshots_mod.rollback_to(number, str(PROJECT_ROOT)))
+        return {"ok": ok, "message": message}
+
+    def run_as_root(self, command: str) -> dict:
+        """Backs main.html's `/root <command>` slash command -- runs via
+        root_exec.run_as_root, which uses the sudo password cached by
+        `gremlin set-sudo-password` (never prompts here)."""
+        result = asyncio.run(root_exec.run_as_root(command, str(PROJECT_ROOT)))
+        return {
+            "ok": result.ok, "stdout": result.stdout, "stderr": result.stderr,
+            "exit_code": result.exit_code, "timed_out": result.timed_out,
+        }
 
     def launch(self, subcommand: str) -> dict:
         terminal = find_terminal()

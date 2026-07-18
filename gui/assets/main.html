@@ -57,6 +57,7 @@
     margin-top: 2px;
   }
   .turn.error .body { color: #ff9d9d; }
+  .turn.system .body { color: #ffd27d; }
   #thinking {
     padding: 0 12px 6px;
     font-size: 12px;
@@ -157,8 +158,13 @@ async function sendMessage() {
   const message = inputEl.value.trim();
   if (!message || !window.pywebview) return;
   inputEl.value = '';
-  addTurn('user', message);
 
+  if (message.startsWith('/')) {
+    await handleSlashCommand(message);
+    return;
+  }
+
+  addTurn('user', message);
   thinkingEl.style.display = 'block';
   try {
     const result = await window.pywebview.api.chat(message);
@@ -168,6 +174,80 @@ async function sendMessage() {
   } finally {
     thinkingEl.style.display = 'none';
   }
+}
+
+// Slash commands are intercepted before the normal chat/consult path --
+// /snapshots and /root talk straight to gremlin_core via Api (no HTTP,
+// this already is the desktop), rendered as a visually distinct
+// "system" turn rather than a normal assistant reply.
+async function handleSlashCommand(message) {
+  addTurn('user', message);
+  const parts = message.trim().split(/\s+/);
+  const cmd = parts[0];
+
+  if (cmd === '/snapshots') {
+    thinkingEl.style.display = 'block';
+    try {
+      const r = await window.pywebview.api.list_snapshots();
+      if (!r.ok) {
+        addTurn('system', 'Could not list snapshots: ' + r.result, null, true);
+      } else if (!r.result.length) {
+        addTurn('system', 'No snapshots found.');
+      } else {
+        const lines = r.result.map(s => `  ${s.number}  ${s.date}  ${s.description}`).join('\n');
+        addTurn('system', lines);
+      }
+    } catch (e) {
+      addTurn('system', "Couldn't reach Gremlin: " + e, null, true);
+    } finally {
+      thinkingEl.style.display = 'none';
+    }
+    return;
+  }
+
+  if (cmd === '/rollback') {
+    const number = parts[1];
+    const confirmed = parts[2] === 'confirm';
+    if (!number) {
+      addTurn('system', 'Usage: /rollback <number>  (then /rollback <number> confirm to actually do it)', null, true);
+      return;
+    }
+    if (!confirmed) {
+      addTurn('system', `This rolls back to snapshot ${number} AND REBOOTS the machine. Type "/rollback ${number} confirm" to proceed.`);
+      return;
+    }
+    thinkingEl.style.display = 'block';
+    try {
+      const r = await window.pywebview.api.rollback_to(number);
+      addTurn('system', r.message, null, !r.ok);
+    } catch (e) {
+      addTurn('system', "Couldn't reach Gremlin: " + e, null, true);
+    } finally {
+      thinkingEl.style.display = 'none';
+    }
+    return;
+  }
+
+  if (cmd === '/root') {
+    const command = message.slice('/root'.length).trim();
+    if (!command) {
+      addTurn('system', 'Usage: /root <command>', null, true);
+      return;
+    }
+    thinkingEl.style.display = 'block';
+    try {
+      const r = await window.pywebview.api.run_as_root(command);
+      const body = `exit ${r.exit_code}${r.timed_out ? ' (timed out)' : ''}\n${r.stdout}${r.stderr ? '\n' + r.stderr : ''}`.trim();
+      addTurn('system', body, null, !r.ok);
+    } catch (e) {
+      addTurn('system', "Couldn't reach Gremlin: " + e, null, true);
+    } finally {
+      thinkingEl.style.display = 'none';
+    }
+    return;
+  }
+
+  addTurn('system', `Unknown command: ${cmd}\nAvailable: /snapshots, /rollback <number>, /root <command>`, null, true);
 }
 
 sendBtn.addEventListener('click', sendMessage);
