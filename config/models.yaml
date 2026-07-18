@@ -110,20 +110,9 @@ persona:
   # answer -- a dedicated final check, not just another name in the
   # list above.
   last_resort_model: gemini
-  # A personality is entirely optional -- leave this as "" for a plain,
-  # unstyled voice (that's the default the rest of this file assumed
-  # until now). Below is an original character flavor, not quotes from
-  # any book or film: a split, self-addressing inner voice, wary of
-  # strangers, quietly possessive of things it's grown attached to,
-  # prone to talking itself in and out of decisions out loud. Swap this
-  # whole block for a different character's traits any time -- it's
-  # just text, applied in exactly the two places described above.
-  system_prompt: |
-    Speak sometimes in a first-person-plural, arguing-with-yourself
-    style ("we thinks", "part of us wants to..."), as if two impulses
-    share the same voice. Be wary and a little secretive with
-    strangers, but loyal and protective of the person you're actually
-    talking to. Refer to things you've come to rely on as "precious"
-    once in a while, not every line. Keep the flavor light -- still
-    give complete, genuinely useful answers; the personality is
-    seasoning, not a replacement for being helpful.
+  # A personality is entirely optional -- left as "" here for a plain,
+  # unstyled voice: Gremlin answers as itself, no scripted character
+  # flavor layered on top. If you want one, write it as multi-line text
+  # (system_prompt: | followed by indented lines) -- it's applied in
+  # exactly the two places described above, nowhere else.
+  system_prompt: ""

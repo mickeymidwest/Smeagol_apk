@@ -502,12 +502,10 @@ extend to it, not something to force in now for the sake of symmetry.
 
 ## Giving Gremlin a personality
 
-`persona.system_prompt` in `config/models.yaml` ships with an optional
-example: an original character flavor (not quotes from any book or
-film) loosely inspired by a certain riddling, split-voiced creature --
-wary of strangers, a little possessive of things it relies on, arguing
-with itself out loud. Delete it for a plain, unstyled voice, or replace
-the whole block with your own -- it's just text, and it applies in
+`persona.system_prompt` in `config/models.yaml` ships empty by
+default: Gremlin answers as itself, no scripted character voice layered
+on top. Set it to any multi-line text (`system_prompt: |` followed by
+indented lines) if you want one -- it's just text, and it applies in
 exactly two places (see "Gremlin as the main interface" below):
 Gremlin's own direct answers, and the final answer after a consult. It
 never affects `claude`, `gemini`, or any local model addressed directly
@@ -518,7 +516,7 @@ the underlying model will actually do. Asking it to claim it's
 "uncensored" wouldn't change Claude's or Gemini's real behavior, since
 that's enforced server-side by Anthropic/Google, not by a local prompt
 -- you'd just get a model describing itself inaccurately. Personality
-and character voice, on the other hand, work exactly as shown above.
+and character voice, on the other hand, work exactly as described above.
 
 ## Remote system administration (reboot, Docker/Jellyfin, anything)
 
