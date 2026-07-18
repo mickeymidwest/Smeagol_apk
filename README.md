@@ -7,6 +7,49 @@ Smeagol's own source code, which get validated and applied automatically.
 
 ## Setup on Manjaro
 
+**Starting from nothing on a fresh machine** (nothing cloned yet):
+```bash
+curl -O https://raw.githubusercontent.com/<you>/<repo>/main/bootstrap.sh
+bash bootstrap.sh https://github.com/<you>/<repo>.git
+```
+Clones the repo, then runs everything below automatically. If you've
+already cloned it yourself, just `bash bootstrap.sh` from inside (or
+above) that folder does the same thing without needing the URL.
+
+**If you're already inside a cloned/extracted copy**, skip straight to:
+```bash
+cd smeagol
+./setup.sh
+```
+Creates the venv, installs dependencies, detects whether this specific
+machine has an NVIDIA GPU and installs the matching CUDA wheel
+automatically (falls back to CPU-only cleanly if there's no GPU, or if
+no prebuilt wheel matches your driver's CUDA version), and prompts for
+your API keys -- but only the ones that aren't already set in `.env`.
+
+That last part matters for exactly the laptop-then-desktop workflow:
+run it on your laptop, enter your keys once, then copy the whole
+project folder over to the desktop (skip `venv/` -- see below) and run
+`./setup.sh` again there. It'll skip re-creating the venv, skip
+re-asking for keys that already made it into `.env`, and this time
+detect the desktop's actual GPU and install the CUDA-accelerated wheel
+instead of CPU-only. Same script, correct behavior on each machine.
+
+I tested every branch of this for real rather than just writing it and
+hoping: ran it in an environment with genuinely no GPU (confirmed the
+CPU fallback path), faked a `2070-Super`-style `nvidia-smi` output to
+confirm the CUDA-version-to-wheel-tag parsing is exactly right
+(`CUDA Version: 12.4` → `cu124`), confirmed a real failed wheel match
+correctly falls back to CPU instead of just crashing, confirmed a
+successful GPU match correctly skips the redundant CPU install, and
+confirmed re-running the whole script a second time skips the venv and
+leaves already-set keys untouched. The one thing I couldn't test here:
+an actual successful CUDA wheel *installation* against a real GPU,
+since this sandbox has none -- that part you'll be the first to
+actually confirm.
+
+### Or the manual steps, if you'd rather see each one
+
 ```bash
 sudo pacman -S python python-pip base-devel cmake git
 cd smeagol
