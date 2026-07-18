@@ -104,6 +104,14 @@ class ModelRegistry:
     def names(self) -> list[str]:
         return list(self.backends.keys())
 
+    def consult_models(self) -> list[str]:
+        """The persona's curated local consult models (config: persona.consult_models),
+        regardless of what the persona itself is named."""
+        for b in self.backends.values():
+            if b.info.kind == "persona":
+                return list(getattr(b, "consult_model_names", []))
+        return []
+
     async def close_all(self):
         for b in self.backends.values():
             await b.close()

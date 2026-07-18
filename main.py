@@ -9,7 +9,11 @@ Usage (after `chmod +x smeagol` and putting it on your PATH):
   smeagol chat <model_name>
   smeagol broadcast <model1,model2,...> "<prompt>"
   smeagol plan <model1,model2,...> "<task>"
-  smeagol improve <model1,model2,...> "<goal>" [--apply] [--test] [--reviewer-a=NAME] [--reviewer-b=NAME]
+  smeagol improve <model1,model2,...> "<goal>" [--apply] [--test] [--reviewer-a=NAME] [--reviewer-b=NAME] [--allow-consult-override]
+    --allow-consult-override: if reviewer-a/reviewer-b (default claude/gemini) don't both
+    approve, fall back to checking whether all 4 local consult models (config/models.yaml
+    persona.consult_models) unanimously approve instead. Off by default -- must be requested
+    explicitly per run.
   smeagol auto-fix
   smeagol edit <path> ["<problem description>"]
   smeagol serve [port]           (default: 8765) -- lets the phone app connect
@@ -305,6 +309,8 @@ async def cmd_improve(
     run_tests: bool,
     reviewer_a: str,
     reviewer_b: str,
+    allow_consult_override: bool = False,
+    consult_models: Optional[list[str]] = None,
 ):
     print(f"Asking {', '.join(model_names)} to propose changes for: {goal}\n")
     patch = await self_improve.propose_patch(router, model_names, goal, PROJECT_ROOT)
@@ -327,14 +333,44 @@ async def cmd_improve(
                 verdict = "APPROVED" if r.approved else "REQUESTED CHANGES"
                 print(f"  [{r.reviewer}] {verdict}" + (f" -- {r.feedback}" if r.feedback else ""))
 
-            if not outcome.approved:
-                print(f"\nNOT applied -- {outcome.reason}")
-                print("Smeagol is only allowed to edit its own code once both reviewers approve the same patch.")
-                return
+            applied_by = f"{','.join(model_names)} (reviewed by {reviewer_a},{reviewer_b})"
 
-            print(f"\nBoth reviewers approved after {outcome.rounds_used} round(s). Applying...")
+            if not outcome.approved:
+                if not allow_consult_override:
+                    print(f"\nNOT applied -- {outcome.reason}")
+                    print("Smeagol is only allowed to edit its own code once both reviewers approve the same patch.")
+                    print("(rerun with --allow-consult-override to permit the 4-model consensus path instead)")
+                    return
+
+                print(f"\n{reviewer_a}/{reviewer_b} gate not satisfied -- {outcome.reason}")
+                if not consult_models:
+                    print("NOT applied -- --allow-consult-override was set, but no consult models are configured "
+                          "(config/models.yaml persona.consult_models).")
+                    return
+
+                print(f"=== Override check: all of {', '.join(consult_models)} must approve ===")
+                override_outcome = await review.consult_consensus_check(
+                    router, outcome.patch, goal, consult_models
+                )
+                for r in override_outcome.history:
+                    verdict = "APPROVED" if r.approved else "REQUESTED CHANGES"
+                    print(f"  [{r.reviewer}] {verdict}" + (f" -- {r.feedback}" if r.feedback else ""))
+
+                if not override_outcome.approved:
+                    print(f"\nNOT applied -- {override_outcome.reason}")
+                    print(f"Neither the {reviewer_a}/{reviewer_b} gate nor unanimous consult-model consensus was reached.")
+                    return
+
+                print(f"\nAll {len(consult_models)} consult models approved -- applying via override "
+                      f"(without {reviewer_a}/{reviewer_b} approval)...")
+                outcome = override_outcome
+                applied_by = f"{','.join(model_names)} (consult-consensus override: {','.join(consult_models)}, " \
+                             f"without {reviewer_a}/{reviewer_b} approval)"
+            else:
+                print(f"\nBoth reviewers approved after {outcome.rounds_used} round(s). Applying...")
+
             result = await self_improve.apply_patch(
-                outcome.patch, PROJECT_ROOT, goal, applied_by=f"{','.join(model_names)} (reviewed by {reviewer_a},{reviewer_b})",
+                outcome.patch, PROJECT_ROOT, goal, applied_by=applied_by,
                 run_tests=run_tests,
             )
             print("\n=== Result ===")
@@ -359,13 +395,20 @@ async def cmd_auto_fix(registry: ModelRegistry, router: Router):
     model_names = [n for n in registry.names() if registry.get(n).info.kind != "persona"]
     print(f"Using: {', '.join(model_names)}")
     run_tests_input = input("Also run pytest before committing? (y/N): ").strip().lower()
+    override_input = input(
+        "If claude/gemini don't both approve, allow the 4 local consult models "
+        "to approve it instead if they unanimously agree? (y/N): "
+    ).strip().lower()
 
     # Reuses cmd_improve entirely -- auto-fix is a friendlier front door,
     # not a different, lighter-weight path. The two-reviewer gate always
-    # applies; there's no way to reach apply_patch without it.
+    # applies first; the consult-consensus override is opt-in per run,
+    # never silent.
     await cmd_improve(
         router, model_names, goal, do_apply=True, run_tests=(run_tests_input == "y"),
         reviewer_a="claude", reviewer_b="gemini",
+        allow_consult_override=(override_input == "y"),
+        consult_models=registry.consult_models(),
     )
 
 
@@ -465,6 +508,7 @@ async def main():
             extra_args = sys.argv[4:]
             do_apply = "--apply" in extra_args
             run_tests = "--test" in extra_args
+            allow_consult_override = "--allow-consult-override" in extra_args
             reviewer_a = "claude"
             reviewer_b = "gemini"
             for arg in extra_args:
@@ -472,7 +516,11 @@ async def main():
                     reviewer_a = arg.split("=", 1)[1]
                 elif arg.startswith("--reviewer-b="):
                     reviewer_b = arg.split("=", 1)[1]
-            await cmd_improve(router, models, goal, do_apply, run_tests, reviewer_a, reviewer_b)
+            await cmd_improve(
+                router, models, goal, do_apply, run_tests, reviewer_a, reviewer_b,
+                allow_consult_override=allow_consult_override,
+                consult_models=registry.consult_models(),
+            )
         elif cmd == "auto-fix":
             await cmd_auto_fix(registry, router)
         elif cmd == "edit":

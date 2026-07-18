@@ -11,6 +11,7 @@ no way to skip straight to apply_patch from a proposal -- review_and_revise
 sits between propose_patch and apply_patch in main.py's improve command.
 """
 from __future__ import annotations
+import asyncio
 import json
 import re
 from dataclasses import dataclass, field
@@ -163,3 +164,35 @@ async def review_and_revise(
         history=history,
         reason=f"{reviewer_a} and {reviewer_b} did not both approve within {max_rounds} rounds",
     )
+
+
+async def consult_consensus_check(
+    router: Router,
+    patch: str,
+    goal: str,
+    consult_models: list[str],
+) -> ReviewOutcome:
+    """
+    The override path: instead of the claude/gemini gate, checks whether
+    EVERY model in `consult_models` independently approves the patch as
+    it currently stands. Unlike review_and_revise, this doesn't loop or
+    revise on a rejection -- it's a single up-or-down consensus read on
+    one fixed patch, called only after the normal gate has already failed
+    and the caller has explicitly opted into the override (--allow-consult-override).
+    Any model that's unreachable or unclear counts as not approving
+    (same fail-closed rule as _review_once), so consensus really does
+    require all of them, not just a quorum.
+    """
+    if not consult_models:
+        return ReviewOutcome(approved=False, patch=patch, rounds_used=1, history=[],
+                              reason="no consult models configured to check consensus against")
+
+    rounds = list(await asyncio.gather(
+        *(_review_once(router, m, patch, goal) for m in consult_models)
+    ))
+    approved = all(r.approved for r in rounds)
+    reason = None if approved else (
+        "not all consult models approved: "
+        + ", ".join(r.reviewer for r in rounds if not r.approved)
+    )
+    return ReviewOutcome(approved=approved, patch=patch, rounds_used=1, history=rounds, reason=reason)
