@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command setup for Smeagol. Safe to run more than once, and safe
+# One-command setup for Gremlin. Safe to run more than once, and safe
 # to run on a different machine after copying the project over (e.g.
 # laptop -> desktop): it skips whatever's already done rather than
 # redoing it, and only asks for API keys that aren't already set in
@@ -9,7 +9,7 @@
 set -e
 cd "$(dirname "$0")"
 
-echo "=== Smeagol setup ==="
+echo "=== Gremlin setup ==="
 echo
 
 # --- 1. Virtual environment ---
@@ -25,9 +25,9 @@ source venv/bin/activate
 #     since which wheel to use depends on this specific machine's hardware) ---
 echo "[*] Installing Python dependencies..."
 pip install --upgrade pip -q
-grep -v "^llama-cpp-python" requirements.txt > /tmp/smeagol-reqs-no-llama.txt
-pip install -r /tmp/smeagol-reqs-no-llama.txt -q
-rm -f /tmp/smeagol-reqs-no-llama.txt
+grep -v "^llama-cpp-python" requirements.txt > /tmp/gremlin-reqs-no-llama.txt
+pip install -r /tmp/gremlin-reqs-no-llama.txt -q
+rm -f /tmp/gremlin-reqs-no-llama.txt
 
 # --- 3. llama-cpp-python: GPU-aware, falls back to CPU-only automatically ---
 echo
@@ -91,4 +91,4 @@ fi
 echo
 echo "=== Setup complete ==="
 echo "Try it: source venv/bin/activate && python main.py list"
-echo "(or chmod +x smeagol && ./smeagol list -- see README for the one-time PATH setup)"
+echo "(or chmod +x gremlin && ./gremlin list -- see README for the one-time PATH setup)"

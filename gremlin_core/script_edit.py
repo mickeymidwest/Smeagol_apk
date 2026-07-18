@@ -1,9 +1,9 @@
 """
-`smeagol edit <path> "<problem description>"` -- fixes a problem in any
-script on the machine Smeagol is installed on. This is deliberately
+`gremlin edit <path> "<problem description>"` -- fixes a problem in any
+script on the machine Gremlin is installed on. This is deliberately
 separate from self_improve.py and more cautious about it:
 
-- self_improve.py only ever touches smeagol_core/*.py, has full git
+- self_improve.py only ever touches gremlin_core/*.py, has full git
   history, and requires two-model review before anything lands.
 - This touches files anywhere you point it, which is a bigger blast
   radius, so instead it leans on: a plain-file backup made before
@@ -63,7 +63,7 @@ def check_path_safety(path: str) -> Optional[str]:
 
 def backup_path(path: Path) -> Path:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    return path.with_name(f"{path.name}.smeagol-backup-{timestamp}")
+    return path.with_name(f"{path.name}.gremlin-backup-{timestamp}")
 
 
 def diff_preview(old_content: str, new_content: str, filename: str) -> str:

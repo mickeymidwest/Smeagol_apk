@@ -1,6 +1,6 @@
 """
 `python gui/app.py` -- a small always-on-top hologram window; click it
-to open a settings panel showing registered models and Smeagol's
+to open a settings panel showing registered models and Gremlin's
 persona config, with buttons that launch existing CLI commands in a
 terminal rather than reimplementing their interactive flows.
 
@@ -24,8 +24,8 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from smeagol_core import model_scan  # noqa: E402
-from smeagol_core.status import get_status_data  # noqa: E402
+from gremlin_core import model_scan  # noqa: E402
+from gremlin_core.status import get_status_data  # noqa: E402
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 CONFIG_PATH = PROJECT_ROOT / "config" / "models.yaml"
@@ -42,7 +42,7 @@ def find_terminal() -> str | None:
 
 def build_launch_command(terminal: str, subcommand: str, project_root: Path = PROJECT_ROOT) -> list[str]:
     """Pure logic, no GUI/subprocess dependency -- returns the argv list
-    that would be used to open a terminal running the given smeagol
+    that would be used to open a terminal running the given gremlin
     subcommand. Split out from launch() so the exact command
     construction can be tested without actually spawning a process."""
     inner = f'cd "{project_root}" && python3 main.py {subcommand}; exec bash'
@@ -66,7 +66,7 @@ class Api:
 
         if self._settings_window is None or self._settings_window not in webview.windows:
             self._settings_window = webview.create_window(
-                "Smeagol Settings",
+                "Gremlin Settings",
                 str(ASSETS_DIR / "settings.html"),
                 width=420, height=480, resizable=True, js_api=self,
             )
@@ -104,7 +104,7 @@ def main():
         width, height = 200, 200
 
     webview.create_window(
-        "Smeagol",
+        "Gremlin",
         str(ASSETS_DIR / "hologram.html"),
         width=width, height=height,
         frameless=True, easy_drag=True, on_top=True,

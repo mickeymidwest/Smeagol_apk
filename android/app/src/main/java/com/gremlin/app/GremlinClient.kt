@@ -1,4 +1,4 @@
-package com.smeagol.app
+package com.gremlin.app
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -19,12 +19,12 @@ import java.net.URL
  * keys, in the same persona voice cached from the last time the
  * desktop was reachable. This deliberately does NOT reimplement the
  * router/persona/consult machinery in Kotlin -- that logic stays in
- * one place (smeagol_core), and the phone either borrows it over the
+ * one place (gremlin_core), and the phone either borrows it over the
  * network or falls back to a much simpler direct call.
  */
 data class ChatResult(val answer: String, val source: String)
 
-class SmeagolClient(private val prefs: SharedPreferences, private val appContext: Context) {
+class GremlinClient(private val prefs: SharedPreferences, private val appContext: Context) {
 
     // Short connect timeout for the desktop attempt -- on the home LAN
     // this connects almost instantly, so it costs nothing there. Away

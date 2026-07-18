@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "com.smeagol.app"
+    namespace = "com.gremlin.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.smeagol.app"
+        applicationId = "com.gremlin.app"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

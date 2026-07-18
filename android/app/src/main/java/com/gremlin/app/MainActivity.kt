@@ -1,4 +1,4 @@
-package com.smeagol.app
+package com.gremlin.app
 
 import android.content.Intent
 import android.content.SharedPreferences
@@ -20,7 +20,7 @@ import java.net.URI
 class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
-    private lateinit var smeagolClient: SmeagolClient
+    private lateinit var gremlinClient: GremlinClient
 
     private lateinit var connectionLabel: TextView
     private lateinit var chatLog: TextView
@@ -50,8 +50,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        prefs = getSharedPreferences("smeagol_prefs", MODE_PRIVATE)
-        smeagolClient = SmeagolClient(prefs, applicationContext)
+        prefs = getSharedPreferences("gremlin_prefs", MODE_PRIVATE)
+        gremlinClient = GremlinClient(prefs, applicationContext)
 
         connectionLabel = findViewById(R.id.connection_label)
         chatLog = findViewById(R.id.chat_log)
@@ -69,7 +69,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.scan_button).setOnClickListener { startQrScan() }
         findViewById<Button>(R.id.send_button).setOnClickListener { sendMessage() }
         findViewById<Button>(R.id.export_button).setOnClickListener {
-            exportLauncher.launch("smeagol-chat-${System.currentTimeMillis()}.txt")
+            exportLauncher.launch("gremlin-chat-${System.currentTimeMillis()}.txt")
         }
     }
 
@@ -116,7 +116,7 @@ class MainActivity : AppCompatActivity() {
     private fun startQrScan() {
         IntentIntegrator(this)
             .setDesiredBarcodeFormats(listOf(IntentIntegrator.QR_CODE))
-            .setPrompt("Scan the pairing code shown by `smeagol serve`")
+            .setPrompt("Scan the pairing code shown by `gremlin serve`")
             .setBeepEnabled(false)
             .initiateScan()
     }
@@ -145,7 +145,7 @@ class MainActivity : AppCompatActivity() {
                 ?.getOrNull(1)
 
             if (uri.host == null || scannedToken == null) {
-                Toast.makeText(this, "That QR code doesn't look like a Smeagol pairing code", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "That QR code doesn't look like a Gremlin pairing code", Toast.LENGTH_LONG).show()
                 return
             }
 
@@ -181,7 +181,7 @@ class MainActivity : AppCompatActivity() {
         messageInput.setText("")
 
         Thread {
-            val result = smeagolClient.chat(message)
+            val result = gremlinClient.chat(message)
             runOnUiThread {
                 val sourceTag = when (result.source) {
                     "desktop" -> ""
@@ -189,7 +189,7 @@ class MainActivity : AppCompatActivity() {
                     "gemini" -> "  (standalone, via Gemini)"
                     else -> ""
                 }
-                appendToLog("smeagol: ${result.answer}$sourceTag")
+                appendToLog("gremlin: ${result.answer}$sourceTag")
             }
         }.start()
     }

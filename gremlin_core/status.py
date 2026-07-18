@@ -7,7 +7,7 @@ from . import model_scan
 
 
 def get_status_data(config_path: Path) -> dict:
-    """Reads config/models.yaml the same way `smeagol list` does."""
+    """Reads config/models.yaml the same way `gremlin list` does."""
     text = config_path.read_text()
     entries = model_scan.list_all_entries(text)
     cfg = yaml.safe_load(text) or {}

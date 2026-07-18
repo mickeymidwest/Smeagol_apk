@@ -1,5 +1,5 @@
 [Unit]
-Description=Smeagol server
+Description=Gremlin server
 After=network-online.target docker.service
 Wants=network-online.target
 
@@ -7,12 +7,12 @@ Wants=network-online.target
 # Edit these two before installing -- see the "Auto-start on boot"
 # section of the README for the exact steps.
 User=YOUR_USERNAME
-WorkingDirectory=/home/YOUR_USERNAME/Downloads/smeagol
-ExecStart=/home/YOUR_USERNAME/Downloads/smeagol/venv/bin/python main.py serve
+WorkingDirectory=/home/YOUR_USERNAME/Downloads/gremlin
+ExecStart=/home/YOUR_USERNAME/Downloads/gremlin/venv/bin/python main.py serve
 Restart=on-failure
 RestartSec=5
 
-# Runs as your own user, not root -- if smeagol needs to manage Docker
+# Runs as your own user, not root -- if gremlin needs to manage Docker
 # containers, add your user to the `docker` group instead of running
 # this service as root:
 #   sudo usermod -aG docker $USER

@@ -79,7 +79,7 @@ def list_all_entries(config_text: str) -> list[dict]:
 
 def persona_references(config_text: str, name: str) -> list[str]:
     """Which persona fields (if any) reference this model name -- so
-    removal can warn before breaking smeagol's config."""
+    removal can warn before breaking gremlin's config."""
     cfg = yaml.safe_load(config_text) or {}
     persona = cfg.get("persona") or {}
     hits = []
@@ -154,7 +154,7 @@ def remove_model_and_clean_persona(config_path: str, name: str) -> tuple[bool, O
     """The real removal entry point: removes the model's block AND scrubs
     it from persona.fallback_models / persona.consult_models so nothing
     dangles. Refuses outright to remove persona.primary_model -- there's
-    no safe automatic substitute for "the model smeagol answers with by
+    no safe automatic substitute for "the model gremlin answers with by
     default", so that has to be a deliberate config edit, not an
     automatic one. Validates the end result by actually building the
     registry, restoring the original file if anything's still broken."""
@@ -166,12 +166,12 @@ def remove_model_and_clean_persona(config_path: str, name: str) -> tuple[bool, O
     refs = persona_references(backup_text, name)
     if "primary_model" in refs:
         return False, (
-            f"'{name}' is smeagol's primary_model -- refusing to remove it automatically. "
+            f"'{name}' is gremlin's primary_model -- refusing to remove it automatically. "
             f"Change primary_model to something else in config/models.yaml first."
         )
     if "last_resort_model" in refs:
         return False, (
-            f"'{name}' is smeagol's last_resort_model -- refusing to remove it automatically. "
+            f"'{name}' is gremlin's last_resort_model -- refusing to remove it automatically. "
             f"Change last_resort_model to something else in config/models.yaml first, "
             f"or remove that line if you don't want a last-resort check."
         )

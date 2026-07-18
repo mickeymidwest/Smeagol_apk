@@ -1,9 +1,9 @@
 """
-Lets Smeagol improve its own codebase using whichever models are
+Lets Gremlin improve its own codebase using whichever models are
 registered (local and/or API, one or several at once).
 
 Flow:
-  1. gather_source()   -- read Smeagol's own .py files
+  1. gather_source()   -- read Gremlin's own .py files
   2. propose_patch()   -- one or more models see the source + a goal,
                           each proposes a unified diff; if more than one
                           model is given, a synthesizer model merges the
@@ -33,7 +33,7 @@ from .sandbox import SecureExecutionSandbox
 from . import mutation_log
 
 SELF_IMPROVE_SYSTEM_PROMPT = (
-    "You are improving the source code of an AI orchestrator called Smeagol. "
+    "You are improving the source code of an AI orchestrator called Gremlin. "
     "You will be shown its current source files and a goal. Respond with "
     "ONLY a valid unified diff (git-style, with ---/+++ headers and @@ hunks) "
     "that achieves the goal. No explanation, no markdown fences, no commentary "
@@ -50,7 +50,7 @@ MERGE_SYSTEM_PROMPT = (
 )
 
 
-def gather_source(root: str, package: str = "smeagol_core") -> dict[str, str]:
+def gather_source(root: str, package: str = "gremlin_core") -> dict[str, str]:
     """Read every .py file in the given package, keyed by relative path."""
     base = Path(root) / package
     out = {}
@@ -124,14 +124,14 @@ async def apply_patch(
 
     if not (Path(root) / ".git").exists():
         _run(["git", "init"], root)
-        _run(["git", "config", "user.email", "smeagol@localhost"], root)
-        _run(["git", "config", "user.name", "Smeagol"], root)
+        _run(["git", "config", "user.email", "gremlin@localhost"], root)
+        _run(["git", "config", "user.name", "Gremlin"], root)
         _run(["git", "add", "-A"], root)
         _run(["git", "commit", "-m", "baseline before self-improvement"], root)
     else:
         # repo-local identity fallback in case global git config isn't set
-        _run(["git", "config", "user.email", "smeagol@localhost"], root)
-        _run(["git", "config", "user.name", "Smeagol"], root)
+        _run(["git", "config", "user.email", "gremlin@localhost"], root)
+        _run(["git", "config", "user.name", "Gremlin"], root)
 
     with tempfile.NamedTemporaryFile("w", suffix=".patch", delete=False) as f:
         f.write(patch_text)

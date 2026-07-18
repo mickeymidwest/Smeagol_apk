@@ -1,4 +1,4 @@
-package com.smeagol.app
+package com.gremlin.app
 
 import android.os.Bundle
 import android.widget.ArrayAdapter
@@ -21,7 +21,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        val prefs = getSharedPreferences("smeagol_prefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences("gremlin_prefs", MODE_PRIVATE)
         val host = intent.getStringExtra("host") ?: ""
         val port = intent.getIntExtra("port", 0)
         val token = intent.getStringExtra("token") ?: ""
@@ -211,7 +211,7 @@ class SettingsActivity : AppCompatActivity() {
                 runOnUiThread { renderStatus(json) }
             } catch (e: Exception) {
                 runOnUiThread {
-                    findViewById<TextView>(R.id.settings_persona_info).text = "Couldn't reach smeagol: ${e.message}"
+                    findViewById<TextView>(R.id.settings_persona_info).text = "Couldn't reach gremlin: ${e.message}"
                 }
             }
         }.start()

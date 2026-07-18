@@ -1,11 +1,11 @@
-# Smeagol (Android)
+# Gremlin (Android)
 
-Talks to a Smeagol desktop instance over your home Wi-Fi when it's
+Talks to a Gremlin desktop instance over your home Wi-Fi when it's
 reachable, and falls back to calling Claude or Gemini directly (using
 your own API keys, entered in Settings) when it's not. Same hologram
 widget as the desktop version.
 
-**This folder is part of the combined `smeagol` repo, not its own
+**This folder is part of the combined `gremlin` repo, not its own
 separate repo** -- see the root `README.md`'s "Putting this on GitHub"
 section for the actual push instructions. The short version: one
 `git init` / `git push` at the repo root pushes both this and the
@@ -17,7 +17,7 @@ this specifically whenever something under `android/` changes.
 
 Once the combined repo is pushed (see the root README), check your
 repo's **Actions** tab → the `Android Build` workflow run → scroll to
-**Artifacts** → download `smeagol-debug-apk`. Unzip that, and you have
+**Artifacts** → download `gremlin-debug-apk`. Unzip that, and you have
 an installable APK -- copy it to your phone and open it (you'll need to
 allow "install from unknown sources" the first time, standard for
 anything not from the Play Store).

@@ -39,7 +39,7 @@ def append_away_session(root: str, entries: list[dict]) -> int:
 
 def recent_entries(root: str, limit: int = 5) -> list[dict]:
     """The last `limit` synced away-session exchanges, oldest first --
-    used to give Smeagol background on what was discussed while the
+    used to give Gremlin background on what was discussed while the
     user was away, without needing to re-read the whole log every time."""
     path = os.path.join(root, "data", "away_session_log.jsonl")
     if not os.path.exists(path):

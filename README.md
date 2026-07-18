@@ -1,9 +1,9 @@
-# Smeagol — core orchestrator
+# Gremlin — core orchestrator
 
-Smeagol runs your local GGUF model (Dolphin3.0-Llama3.2-3B) and any API
+Gremlin runs your local GGUF model (Dolphin3.0-Llama3.2-3B) and any API
 models side by side. Models can work solo, as a broadcast group, as a
 plan-then-build multi-agent team, and now: they can propose changes to
-Smeagol's own source code, which get validated and applied automatically.
+Gremlin's own source code, which get validated and applied automatically.
 
 ## Setup on Manjaro
 
@@ -18,7 +18,7 @@ above) that folder does the same thing without needing the URL.
 
 **If you're already inside a cloned/extracted copy**, skip straight to:
 ```bash
-cd smeagol
+cd gremlin
 ./setup.sh
 ```
 Creates the venv, installs dependencies, detects whether this specific
@@ -52,7 +52,7 @@ actually confirm.
 
 ```bash
 sudo pacman -S python python-pip base-devel cmake git
-cd smeagol
+cd gremlin
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -65,7 +65,7 @@ CMAKE_ARGS="-DGGML_CUDA=on" pip install --force-reinstall --no-cache-dir llama-c
 (AMD: `-DGGML_HIPBLAS=on` with ROCm. CPU-only: skip this.)
 
 Edit `config/models.yaml` and point `model_path` at your actual `.gguf` file
--- or skip that entirely and use `smeagol models` below to add them.
+-- or skip that entirely and use `gremlin models` below to add them.
 
 **API keys**: instead of `export`ing them every terminal session, copy
 `.env.example` to `.env` and fill in your real keys -- it's loaded
@@ -74,27 +74,27 @@ environment if not installed). `.env` is listed in `.gitignore`, which
 matters more than it might look: self-improve's very first run does a
 baseline `git init && git add -A` commit, and without that `.gitignore`
 entry a real `.env` with actual secrets would get captured permanently
-into git history the first time you ever run `smeagol improve` or
+into git history the first time you ever run `gremlin improve` or
 `auto-fix`. I caught this by testing the exact scenario (a real-looking
 `.env` present, then triggering that baseline commit) after adding the
 `.env` feature, not by assuming it was fine -- fixed before it shipped.
 
-## The `smeagol` command
+## The `gremlin` command
 
 ```bash
-chmod +x smeagol
-sudo ln -s "$(pwd)/smeagol" /usr/local/bin/smeagol
+chmod +x gremlin
+sudo ln -s "$(pwd)/gremlin" /usr/local/bin/gremlin
 ```
 
-After that, run everything as `smeagol <command>` from anywhere instead
+After that, run everything as `gremlin <command>` from anywhere instead
 of `python main.py <command>` from inside the project folder. It
-automatically uses this project's venv if one exists at `smeagol/venv`.
+automatically uses this project's venv if one exists at `gremlin/venv`.
 
 ## Adding local models by scanning a folder
 
 ```bash
-smeagol models                  # scans ~/Downloads by default
-smeagol models ~/models         # or point it at any folder
+gremlin models                  # scans ~/Downloads by default
+gremlin models ~/models         # or point it at any folder
 ```
 
 ```
@@ -112,21 +112,21 @@ each one from its filename, and writes new entries straight into
 `config/models.yaml` -- without touching or reformatting any of the
 existing entries or comments in that file. Double-check `chat_format`
 for whatever it adds (defaults to `chatml`; change it if a model uses a
-different template), and it's ready: `smeagol chat <name>`.
+different template), and it's ready: `gremlin chat <name>`.
 
 Every model added this way (or via Hugging Face below) is also
 automatically appended to `persona.consult_models` -- otherwise it
-would just sit registered and unused, since Smeagol only ever reaches
+would just sit registered and unused, since Gremlin only ever reaches
 for a model that's actually in his consult group. This applies whether
 you scan a folder or download from Hugging Face; either path wires the
 new model in the same way. Verified by actually building the registry
 afterward and confirming the new model shows up in
-`smeagol.consult_model_names`, not just by checking the raw YAML text.
+`gremlin.consult_model_names`, not just by checking the raw YAML text.
 
 ## Adding models directly from Hugging Face
 
 ```bash
-smeagol models --hf "dolphin llama 3b"
+gremlin models --hf "dolphin llama 3b"
 ```
 
 ```
@@ -159,7 +159,7 @@ parts in isolation) turned up a real, pre-existing break in
 `model_scan.py` -- `insert_entries`, the function that actually writes
 new model entries into `config/models.yaml`, had lost its own `def`
 line somewhere in an earlier edit, leaving its body as dead code
-nobody was calling. That meant the *original* local-folder `smeagol
+nobody was calling. That meant the *original* local-folder `gremlin
 models` scan (not just this new Hugging Face feature) had been quietly
 broken in every zip shipped since whatever edit caused it -- it would
 find files and let you pick them, then crash instead of actually
@@ -171,17 +171,17 @@ that was silently broken.
 ## Removing models
 
 ```bash
-smeagol remove
+gremlin remove
 ```
 
 ```
 Registered models:
 
-  1. dolphin-3b (local_gguf)  [used by smeagol: consult_models]
-  2. local-2 (local_gguf)  [used by smeagol: consult_models]
+  1. dolphin-3b (local_gguf)  [used by gremlin: consult_models]
+  2. local-2 (local_gguf)  [used by gremlin: consult_models]
   3. mistral-7b-instruct-v0-3-q4-k-m (local_gguf)
-  4. claude (anthropic)  [used by smeagol: primary_model]
-  5. gemini (gemini)  [used by smeagol: fallback_models, consult_models]
+  4. claude (anthropic)  [used by gremlin: primary_model]
+  5. gemini (gemini)  [used by gremlin: fallback_models, consult_models]
 
 Remove which one(s)? (comma-separated numbers, or blank to cancel): 3
 ```
@@ -190,21 +190,21 @@ Same text-surgery approach as adding: only the picked entry's block is
 touched, nothing else in the file is reformatted. Two safety behaviors
 worth knowing about:
 
-- If a model is still referenced by smeagol's `fallback_models` or
+- If a model is still referenced by gremlin's `fallback_models` or
   `consult_models`, you'll be warned before removing it -- confirm and
   it's removed **and** automatically scrubbed out of those lists too,
   so nothing dangles.
-- Removing smeagol's `primary_model` is refused outright, always --
-  there's no safe automatic substitute for "the model smeagol answers
+- Removing gremlin's `primary_model` is refused outright, always --
+  there's no safe automatic substitute for "the model gremlin answers
   with by default", so that has to be a deliberate edit to
   `config/models.yaml`, not something `remove` does for you.
 
-## Smeagol as the main interface
+## Gremlin as the main interface
 
-`smeagol chat smeagol` is meant to be the only command you
+`gremlin chat gremlin` is meant to be the only command you
 actually need day to day. Behind that one interface:
 
-1. Smeagol answers on its own (via `primary_model`) whenever it can --
+1. Gremlin answers on its own (via `primary_model`) whenever it can --
    in its own voice, since `system_prompt` (if you set one) applies here.
 2. If its own answer looks uncertain (heuristic check on phrases like
    "I don't know" / "I'm not sure" / an empty answer), it automatically
@@ -217,17 +217,17 @@ actually need day to day. Behind that one interface:
    (`gemini` by default) gets one dedicated final check -- not just
    another name in the same list, and not touched at all if a local
    model already had the answer.
-4. Whatever confident material was found gets handed back to **Smeagol
+4. Whatever confident material was found gets handed back to **Gremlin
    itself** to produce the actual reply. Other models only ever supply
    raw research during a consult -- they never speak to you directly.
-   The final answer is always generated by calling `smeagol` again,
-   which means it always carries Smeagol's own `system_prompt` if
+   The final answer is always generated by calling `gremlin` again,
+   which means it always carries Gremlin's own `system_prompt` if
    you've set one, same as a direct answer would.
 5. Whatever it learns from a consult gets written to
    `data/learning_log.jsonl`. The exact same question asked again is
    answered from that log with zero model calls -- it remembers.
 
-You'll see a short note under Smeagol's answer when this happens:
+You'll see a short note under Gremlin's answer when this happens:
 `(wasn't sure on its own -- consulted: dolphin-3b)`,
 `(wasn't sure on its own -- last-resort check: gemini)`, or
 `(answered from something learned earlier -- no model call needed)`.
@@ -238,44 +238,44 @@ side (consult other models, remember the result) is safe -- worst case
 you get a synthesized answer. Automating the *code-edit* side based on
 whatever a user happened to type is a different kind of risk: it would
 mean any message, including a malicious or just careless one, could
-cause Smeagol to rewrite its own source with no review. So a consult
+cause Gremlin to rewrite its own source with no review. So a consult
 never triggers `apply_patch` on its own. If something in
 `data/learning_log.jsonl` looks like it points at a real gap worth
 fixing in code, that's a call for you to make with the existing
 reviewed flow:
 
 ```bash
-python main.py improve dolphin-3b,claude,gemini "teach smeagol to handle X" --apply
+python main.py improve dolphin-3b,claude,gemini "teach gremlin to handle X" --apply
 ```
 
-## Smeagol is its own identity
+## Gremlin is its own identity
 
-`smeagol` is a persona layer, not just another entry in the model list.
-Talking to it (`python main.py chat smeagol`) always gets the same name,
+`gremlin` is a persona layer, not just another entry in the model list.
+Talking to it (`python main.py chat gremlin`) always gets the same name,
 personality, and system prompt back -- regardless of which backend
 model actually generates the reply.
 
 ```yaml
 persona:
-  name: smeagol
+  name: gremlin
   primary_model: dolphin-3b        # <-- swap this any time, no other change needed
   fallback_models: [claude, gemini]
   system_prompt: |
-    You are Smeagol, a personal AI running locally on the user's own machine...
+    You are Gremlin, a personal AI running locally on the user's own machine...
 ```
 
-- Change `primary_model` and every future conversation with "smeagol" is
+- Change `primary_model` and every future conversation with "gremlin" is
   instantly backed by a different engine.
 - If the primary errors out (local model crashed, API down, rate
   limited), it automatically fails over to each fallback in order --
-  Smeagol staying available doesn't depend on any single backend
+  Gremlin staying available doesn't depend on any single backend
   staying up.
 - `dolphin-3b`, `claude`, and `gemini` are still directly addressable by
   name for `broadcast`/`plan`/`improve` when you want to reach a
-  specific model rather than "whoever's currently answering as Smeagol."
+  specific model rather than "whoever's currently answering as Gremlin."
 
 ```bash
-python main.py chat smeagol
+python main.py chat gremlin
 ```
 
 ## Adding Claude and Gemini
@@ -303,7 +303,7 @@ python main.py plan dolphin-3b,claude,gemini "build a script that does X"
 python main.py improve dolphin-3b,claude,gemini "add a retry with backoff"
 ```
 
-All three now work identically everywhere in Smeagol -- broadcast, plan,
+All three now work identically everywhere in Gremlin -- broadcast, plan,
 and self-improve all treat local and API models the same way.
 
 ## Using it
@@ -364,7 +364,7 @@ instead of a confusing traceback, and the patch is reverted rather than
 left half-applied.
 
 How it stays safe:
-- Every model sees Smeagol's actual current source and proposes a real
+- Every model sees Gremlin's actual current source and proposes a real
   unified diff, not vague suggestions.
 - If more than one model proposes, each works independently and a
   designated model merges them into one final diff -- the "multiple
@@ -401,19 +401,19 @@ How it stays safe:
   to rely on. Fixed at the root: fenced JSON is tried first now, and
   only falls back to the greedy match as a last resort.
 - If `--test` is used, pytest runs through `SecureExecutionSandbox`
-  (`smeagol_core/sandbox.py`) rather than a raw unconfined subprocess
+  (`gremlin_core/sandbox.py`) rather than a raw unconfined subprocess
   call -- confined to the project's own directory, a minimal PATH, and
   a hard timeout that kills a hung test run instead of letting it hang
   the whole command indefinitely.
 - Every successful change is logged to `data/mutation_log.jsonl`
-  (`smeagol_core/mutation_log.py`) -- what changed, why, when -- in
+  (`gremlin_core/mutation_log.py`) -- what changed, why, when -- in
   addition to the git commit itself, so there's a queryable history
-  beyond scanning commit messages one at a time. `smeagol edit`'s
+  beyond scanning commit messages one at a time. `gremlin edit`'s
   successful fixes go in the same log.
-- A file-based lock (`smeagol_core/process_lock.py`) stops two separate
-  smeagol processes from mutating files at the same time -- e.g. the
+- A file-based lock (`gremlin_core/process_lock.py`) stops two separate
+  gremlin processes from mutating files at the same time -- e.g. the
   desktop GUI's Auto-fix button spawns its own terminal process, and
-  nothing stops you from also running `smeagol improve` yourself in a
+  nothing stops you from also running `gremlin improve` yourself in a
   different terminal simultaneously. This needed an actual file lock,
   not an in-process `asyncio.Lock` (which only serializes concurrent
   coroutines inside one process, not two separate OS processes) --
@@ -421,9 +421,9 @@ How it stays safe:
   watching the second one correctly get blocked immediately rather than
   racing or hanging.
 - Every successful change is a discrete git commit, so `git log` shows
-  the whole history of how Smeagol has modified itself, and any change
+  the whole history of how Gremlin has modified itself, and any change
   is one `git revert <hash>` away from undone.
-- This only ever touches files inside `smeagol_core/` -- there's no path
+- This only ever touches files inside `gremlin_core/` -- there's no path
   here that lets a model reach outside the project directory.
 
 The `--apply` flag is still separate from the dry run on purpose: you
@@ -434,7 +434,7 @@ the process. Both matter for different reasons.
 ## Auto-fix: a friendlier front door to self-improvement
 
 ```bash
-smeagol auto-fix
+gremlin auto-fix
 ```
 
 Asks what you want added or fixed, then runs the exact same pipeline as
@@ -447,8 +447,8 @@ review-free path hiding behind this; it's the same gate every time.
 ## Editing any script on this machine
 
 ```bash
-smeagol edit ~/scripts/backup.sh
-smeagol edit ~/projects/tool.py "it crashes when the input file is empty"
+gremlin edit ~/scripts/backup.sh
+gremlin edit ~/projects/tool.py "it crashes when the input file is empty"
 ```
 
 This is a different, wider-reach feature from self-improvement, and
@@ -458,7 +458,7 @@ it's treated with different caution to match:
 - Refuses outright to touch anything under a system directory (`/etc`,
   `/usr`, `/bin`, `/boot`, etc.) -- "a script on my computer" means
   your own stuff.
-- Always backs up the original file (`name.smeagol-backup-<timestamp>`)
+- Always backs up the original file (`name.gremlin-backup-<timestamp>`)
   before writing anything.
 - For `.py` files, runs a compile check and automatically reverts if
   the fix doesn't even parse.
@@ -473,11 +473,11 @@ it's treated with different caution to match:
 
 ## The execution sandbox
 
-`smeagol_core/sandbox.py` is a small, dependency-free way to run a
+`gremlin_core/sandbox.py` is a small, dependency-free way to run a
 command confined to a specific directory with a minimal `PATH` and a
 hard timeout that kills a hung process rather than letting it hang
 forever. Two places use it: the `--test` pytest step in self-improve,
-and the optional verify command in `smeagol edit`.
+and the optional verify command in `gremlin edit`.
 
 Worth being precise about what it actually guarantees, since the name
 "sandbox" can imply more than this delivers: it's a **process-level**
@@ -500,7 +500,7 @@ sandbox to protect. If that ever changes -- if the phone app grows any
 feature that executes code or edits files -- this is the pattern to
 extend to it, not something to force in now for the sake of symmetry.
 
-## Giving Smeagol a personality
+## Giving Gremlin a personality
 
 `persona.system_prompt` in `config/models.yaml` ships with an optional
 example: an original character flavor (not quotes from any book or
@@ -508,8 +508,8 @@ film) loosely inspired by a certain riddling, split-voiced creature --
 wary of strangers, a little possessive of things it relies on, arguing
 with itself out loud. Delete it for a plain, unstyled voice, or replace
 the whole block with your own -- it's just text, and it applies in
-exactly two places (see "Smeagol as the main interface" below):
-Smeagol's own direct answers, and the final answer after a consult. It
+exactly two places (see "Gremlin as the main interface" below):
+Gremlin's own direct answers, and the final answer after a consult. It
 never affects `claude`, `gemini`, or any local model addressed directly
 by name.
 
@@ -530,12 +530,12 @@ built differently, not just bolted onto the existing endpoints.
 
 **A separate admin token, never shown in the pairing QR.** Your regular
 phone-pairing token is fine to have float around as a QR code -- worst
-case with that alone is someone chats with your Smeagol. The admin
+case with that alone is someone chats with your Gremlin. The admin
 token additionally gates running shell commands and rebooting the
 machine, so it's never embedded in the QR flow at all:
 
 ```bash
-smeagol admin-token
+gremlin admin-token
 ```
 
 Run that once, copy the token into the app's Settings → Admin section
@@ -543,7 +543,7 @@ manually. Pairing your phone for chat never grants this by itself.
 
 **What it can do, from Settings → Admin:**
 - Run any command on the desktop (`docker compose restart jellyfin`,
-  `docker logs jellyfin`, editing a compose file via `smeagol edit`,
+  `docker logs jellyfin`, editing a compose file via `gremlin edit`,
   anything) -- runs through the same `SecureExecutionSandbox` used
   elsewhere in this project (confined working directory, minimal PATH,
   hard timeout), and every command is logged to
@@ -570,13 +570,13 @@ So the server comes back up on its own after a reboot -- or after a
 power blip -- without anyone logging in or opening a terminal:
 
 ```bash
-sudo cp deploy/smeagol.service /etc/systemd/system/smeagol.service
-sudo nano /etc/systemd/system/smeagol.service   # fill in your actual username and path
+sudo cp deploy/gremlin.service /etc/systemd/system/gremlin.service
+sudo nano /etc/systemd/system/gremlin.service   # fill in your actual username and path
 sudo systemctl daemon-reload
-sudo systemctl enable --now smeagol
+sudo systemctl enable --now gremlin
 ```
 
-If Smeagol needs to manage Docker containers (Jellyfin, etc.), add
+If Gremlin needs to manage Docker containers (Jellyfin, etc.), add
 your user to the `docker` group rather than running this service as
 root:
 ```bash
@@ -584,13 +584,13 @@ sudo usermod -aG docker $USER
 ```
 (log out and back in once for that to take effect)
 
-Check it's running: `systemctl status smeagol`. Logs:
-`journalctl -u smeagol -f`.
+Check it's running: `systemctl status gremlin`. Logs:
+`journalctl -u gremlin -f`.
 
 One hardware caveat I can't verify for your specific machine: most
 modern boards boot fine with no monitor attached, but a few older ones
 refuse to POST without a display detected. If yours does that, a cheap
-HDMI dummy plug fixes it -- not a Smeagol issue, that's motherboard
+HDMI dummy plug fixes it -- not a Gremlin issue, that's motherboard
 firmware behavior from before any of this software runs.
 
 ## Desktop hologram widget
@@ -606,10 +606,10 @@ stylized design (not the film character's likeness, just a pale,
 large-eyed wireframe head with an idle bob and a holographic scanline
 flicker), not a full 3D engine, but genuinely animated rather than a
 static image. Click it to open a settings panel showing every
-registered model and Smeagol's current persona wiring (primary,
+registered model and Gremlin's current persona wiring (primary,
 fallback, consult group, last resort), with buttons that open a
-terminal running `smeagol chat smeagol`, `smeagol models`,
-`smeagol remove`, or `smeagol auto-fix` -- the GUI is a status view and
+terminal running `gremlin chat gremlin`, `gremlin models`,
+`gremlin remove`, or `gremlin auto-fix` -- the GUI is a status view and
 launcher for the existing CLI, not a reimplementation of it.
 
 **I couldn't visually test this myself** -- this sandbox has no
@@ -621,7 +621,7 @@ actual on-screen appearance and window behavior needs your eyes on
 your actual desktop. If the hologram looks off or a button doesn't
 behave right, that's the part to tell me about.
 
-## Talking to Smeagol from your phone
+## Talking to Gremlin from your phone
 
 Two parts: a server that runs on the desktop, and an Android app that
 talks to it. Same-Wi-Fi/LAN only for now -- reaching it from outside
@@ -630,7 +630,7 @@ which is a distinct, bigger feature than what's here.
 
 ### Away-mode conversations sync back automatically
 
-If you chat with Smeagol while away from home (standalone mode, direct
+If you chat with Gremlin while away from home (standalone mode, direct
 Claude/Gemini calls), the desktop has no idea that happened -- until
 now. The phone queues up every away-mode exchange locally
 (`pending_sync.jsonl` in the app's own storage), and the moment it
@@ -653,8 +653,8 @@ away-mode exchanges landed exactly two entries in the log with the
 right prompts/answers/sources attached, and a normal chat message with
 nothing queued left no log file at all.
 
-**It's not just logged anymore -- Smeagol actually considers it.** The
-last 5 synced away-session exchanges get handed to Smeagol as
+**It's not just logged anymore -- Gremlin actually considers it.** The
+last 5 synced away-session exchanges get handed to Gremlin as
 background context on every message from here on, not just recorded
 and forgotten. Ask "what did I ask about while I was out" once you're
 home and it can actually answer, rather than that history sitting
@@ -669,7 +669,7 @@ actually reached the model as background for that second message.
 ### Desktop side
 
 ```bash
-smeagol serve
+gremlin serve
 ```
 
 Starts an HTTP server, generates (and persists) a pairing token, and
@@ -677,7 +677,7 @@ prints a pairing URL plus a scannable QR code in the terminal
 (`pip install qrcode` for the QR art; works without it too, you'd just
 type the URL in manually). Leave this running while you use the app.
 
-This was the trickiest part to get right: Smeagol's backends hold
+This was the trickiest part to get right: Gremlin's backends hold
 `asyncio.Lock` objects created once and reused across every request.
 The naive approach -- a fresh `asyncio.run()` per incoming request --
 would mean multiple threads each spinning up their own event loop while
@@ -701,7 +701,7 @@ desktop is anywhere nearby.
 
 - **At home** (paired, desktop reachable): every message goes to the
   desktop's `/chat` endpoint and gets the full orchestrator -- all your
-  local models, consult, everything, exactly as `smeagol chat smeagol`
+  local models, consult, everything, exactly as `gremlin chat gremlin`
   gives you.
 - **Away from home** (or never paired at all): the app calls Claude or
   Gemini directly from your phone, using API keys you enter in Settings
@@ -712,7 +712,7 @@ desktop is anywhere nearby.
 
 Deliberately **not** implemented as a second copy of the router/persona/
 consult logic in Kotlin -- that stays in exactly one place
-(`smeagol_core`), and the phone either borrows it over the network or
+(`gremlin_core`), and the phone either borrows it over the network or
 falls back to a much simpler direct call. Every message tries the
 desktop first with a short connect timeout (fast on the home LAN,
 fails quick everywhere else) before falling back, so there's no
@@ -744,7 +744,7 @@ preference toggle.
 
 **Dark theme:** the app is always dark, not just following system
 DayNight -- a white light-mode screen around the dark hologram widget
-would look broken rather than themed, so `Theme.Smeagol` forces the
+would look broken rather than themed, so `Theme.Gremlin` forces the
 always-dark Material Components variant with a palette matching the
 hologram's cyan aesthetic (`colors.xml`).
 
@@ -775,7 +775,7 @@ invalid XML and would have broken the build), cross-checked every
 the layouts (a very common source of Android build failures when they
 drift), and checked all three Kotlin files are at least structurally
 sound (balanced braces/parens). The Claude and Gemini API request
-formats in `SmeagolClient.kt` match the same shapes already tested on
+formats in `GremlinClient.kt` match the same shapes already tested on
 the desktop side (`anthropic_backend.py`, `gemini_backend.py`). But
 actual compilation, and whatever Android Studio's dependency resolution
 turns up, is genuinely unverified. If it doesn't build cleanly on the
@@ -799,12 +799,12 @@ an API model. No code changes needed.
   kept separate from the router so a model never touches your system
   directly, only through an explicit, audited tool call.
 - **Harness/plugin mode**: wrapping this orchestrator as an MCP server
-  so tools like Claude Code can route through Smeagol.
+  so tools like Claude Code can route through Gremlin.
 
 ## Putting this on GitHub (and connecting it to Claude Code / Termux)
 
 ```bash
-cd ~/Downloads/smeagol
+cd ~/Downloads/gremlin
 git init
 git add .
 git commit -m "initial"
@@ -862,7 +862,7 @@ Then, inside that Ubuntu shell (a genuine Linux environment from here on):
 apt update && apt install -y nodejs npm git
 npm install -g @anthropic-ai/claude-code
 git clone <your-repo-url>
-cd smeagol
+cd gremlin
 claude --resume 7959bf23-a3e3-4ac3-9bd9-951d61ce4902
 ```
 

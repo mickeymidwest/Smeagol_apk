@@ -1,9 +1,9 @@
 """
-`smeagol serve` -- runs an HTTP server so a phone app (or anything else
-on the network) can talk to Smeagol.
+`gremlin serve` -- runs an HTTP server so a phone app (or anything else
+on the network) can talk to Gremlin.
 
 Threading/asyncio note, because getting this wrong causes a real
-deadlock: Smeagol's backends (LlamaCppBackend in particular) hold
+deadlock: Gremlin's backends (LlamaCppBackend in particular) hold
 asyncio.Lock instances created once at registry-build time and reused
 across every request. Flask's threaded mode spawns a new OS thread per
 request. Calling asyncio.run(...) fresh inside each request thread
@@ -58,7 +58,7 @@ def get_or_create_admin_token(data_dir: Path) -> str:
     token gets embedded in a QR code and scanned by the phone -- fine
     for chat, but this second token gates system command execution and
     reboot, so it's never shown in the pairing flow at all. You copy it
-    in manually, once, via `smeagol admin-token`."""
+    in manually, once, via `gremlin admin-token`."""
     data_dir.mkdir(parents=True, exist_ok=True)
     token_path = data_dir / ADMIN_TOKEN_PATH_NAME
     if token_path.exists():
@@ -88,7 +88,7 @@ def start_background_loop() -> asyncio.AbstractEventLoop:
     """The one persistent event loop -- see module docstring for why
     this exists instead of asyncio.run() per request."""
     loop = asyncio.new_event_loop()
-    thread = threading.Thread(target=loop.run_forever, daemon=True, name="smeagol-asyncio-loop")
+    thread = threading.Thread(target=loop.run_forever, daemon=True, name="gremlin-asyncio-loop")
     thread.start()
     return loop
 
@@ -135,8 +135,8 @@ def create_app(
         # Live persona voice from the actual running registry, not just
         # the config file -- lets the phone cache the real system_prompt
         # for use when it can't reach this server at all.
-        smeagol_backend = registry.get("smeagol")
-        data["system_prompt"] = smeagol_backend.system_prompt
+        gremlin_backend = registry.get("gremlin")
+        data["system_prompt"] = gremlin_backend.system_prompt
         return jsonify(data)
 
     @app.route("/chat", methods=["POST"])
@@ -158,12 +158,12 @@ def create_app(
         if pending_sync:
             synced_count = away_sync.append_away_session(str(project_root), pending_sync)
 
-        smeagol_backend = registry.get("smeagol")
+        gremlin_backend = registry.get("gremlin")
         result = run_coro(
             loop,
             consult.consult_and_learn(
-                router, "smeagol", smeagol_backend.consult_model_names, message, str(project_root),
-                last_resort_model=smeagol_backend.last_resort_model_name,
+                router, "gremlin", gremlin_backend.consult_model_names, message, str(project_root),
+                last_resort_model=gremlin_backend.last_resort_model_name,
             ),
         )
         result["synced_count"] = synced_count
@@ -254,13 +254,13 @@ def serve(registry: ModelRegistry, router: Router, project_root: str, port: int 
 
     lan_ip = get_lan_ip()
     url = pairing_url(lan_ip, port, token)
-    print(f"Smeagol server running on http://{lan_ip}:{port}")
+    print(f"Gremlin server running on http://{lan_ip}:{port}")
     print(f"(token saved at {data_dir / TOKEN_PATH_NAME} -- reused across restarts)\n")
-    print("Scan this in the Smeagol Android app to pair (same Wi-Fi network required):\n")
+    print("Scan this in the Gremlin Android app to pair (same Wi-Fi network required):\n")
     print_pairing_info(url)
     print()
     print("Admin token (system commands, reboot) is intentionally NOT shown here --")
-    print("run `smeagol admin-token` separately to see it, and enter it manually")
+    print("run `gremlin admin-token` separately to see it, and enter it manually")
     print("in the app's Admin section. Keeping it out of the QR code means")
     print("regular phone pairing never grants remote command/reboot access.")
 

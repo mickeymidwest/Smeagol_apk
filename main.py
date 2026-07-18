@@ -1,23 +1,23 @@
 """
-Smeagol -- core orchestrator CLI.
+Gremlin -- core orchestrator CLI.
 
-Usage (after `chmod +x smeagol` and putting it on your PATH):
-  smeagol list
-  smeagol models [directory]     (default: ~/Downloads)
-  smeagol models --hf "<search terms>"   -- search & download from Hugging Face
-  smeagol remove
-  smeagol chat <model_name>
-  smeagol broadcast <model1,model2,...> "<prompt>"
-  smeagol plan <model1,model2,...> "<task>"
-  smeagol improve <model1,model2,...> "<goal>" [--apply] [--test] [--reviewer-a=NAME] [--reviewer-b=NAME] [--allow-consult-override]
+Usage (after `chmod +x gremlin` and putting it on your PATH):
+  gremlin list
+  gremlin models [directory]     (default: ~/Downloads)
+  gremlin models --hf "<search terms>"   -- search & download from Hugging Face
+  gremlin remove
+  gremlin chat <model_name>
+  gremlin broadcast <model1,model2,...> "<prompt>"
+  gremlin plan <model1,model2,...> "<task>"
+  gremlin improve <model1,model2,...> "<goal>" [--apply] [--test] [--reviewer-a=NAME] [--reviewer-b=NAME] [--allow-consult-override]
     --allow-consult-override: if reviewer-a/reviewer-b (default claude/gemini) don't both
     approve, fall back to checking whether all 4 local consult models (config/models.yaml
     persona.consult_models) unanimously approve instead. Off by default -- must be requested
     explicitly per run.
-  smeagol auto-fix
-  smeagol edit <path> ["<problem description>"]
-  smeagol serve [port]           (default: 8765) -- lets the phone app connect
-  smeagol admin-token             -- reveal the separate admin token (system commands, reboot)
+  gremlin auto-fix
+  gremlin edit <path> ["<problem description>"]
+  gremlin serve [port]           (default: 8765) -- lets the phone app connect
+  gremlin admin-token             -- reveal the separate admin token (system commands, reboot)
 
 Or directly: python main.py <command> ...
 """
@@ -26,16 +26,16 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from smeagol_core.registry import ModelRegistry
-from smeagol_core.router import Router
-from smeagol_core import self_improve
-from smeagol_core import consult
-from smeagol_core import review
-from smeagol_core import model_scan
-from smeagol_core import script_edit
-from smeagol_core import server
-from smeagol_core import hf_hub
-from smeagol_core.process_lock import git_mutation_lock, AlreadyRunning
+from gremlin_core.registry import ModelRegistry
+from gremlin_core.router import Router
+from gremlin_core import self_improve
+from gremlin_core import consult
+from gremlin_core import review
+from gremlin_core import model_scan
+from gremlin_core import script_edit
+from gremlin_core import server
+from gremlin_core import hf_hub
+from gremlin_core.process_lock import git_mutation_lock, AlreadyRunning
 
 try:
     from dotenv import load_dotenv
@@ -105,7 +105,7 @@ def cmd_models(directory: str):
     for name in added_names:
         model_scan.add_to_flow_list(CONFIG_PATH, "consult_models", name)
     print(f"\nAdded to {CONFIG_PATH}: {', '.join(added_names)}")
-    print("Also added to smeagol's consult_models, so he'll actually reach for these when uncertain.")
+    print("Also added to gremlin's consult_models, so he'll actually reach for these when uncertain.")
     print("Run `python main.py list` to confirm, and adjust chat_format per model if needed.")
 
 
@@ -187,8 +187,8 @@ def cmd_models_hf(query: str):
     model_scan.add_to_flow_list(CONFIG_PATH, "consult_models", name)
 
     print(f"\nDownloaded and added as '{name}'.")
-    print("Also added to smeagol's consult_models, so he'll actually reach for this when uncertain.")
-    print("Run `smeagol list` to confirm, and check chat_format matches this model's template.")
+    print("Also added to gremlin's consult_models, so he'll actually reach for this when uncertain.")
+    print("Run `gremlin list` to confirm, and check chat_format matches this model's template.")
 
 
 def cmd_remove():
@@ -201,7 +201,7 @@ def cmd_remove():
     print("Registered models:\n")
     for i, e in enumerate(entries, start=1):
         refs = model_scan.persona_references(config_text, e["name"])
-        tag = f"  [used by smeagol: {', '.join(refs)}]" if refs else ""
+        tag = f"  [used by gremlin: {', '.join(refs)}]" if refs else ""
         print(f"  {i}. {e['name']} ({e['type']}){tag}")
 
     print()
@@ -225,7 +225,7 @@ def cmd_remove():
         refs = model_scan.persona_references(config_text, name)
         if refs:
             confirm = input(
-                f"'{name}' is used by smeagol's {', '.join(refs)} -- "
+                f"'{name}' is used by gremlin's {', '.join(refs)} -- "
                 f"removing it will also clean it out of those list(s). Remove anyway? (y/N): "
             ).strip().lower()
             if confirm != "y":
@@ -338,7 +338,7 @@ async def cmd_improve(
             if not outcome.approved:
                 if not allow_consult_override:
                     print(f"\nNOT applied -- {outcome.reason}")
-                    print("Smeagol is only allowed to edit its own code once both reviewers approve the same patch.")
+                    print("Gremlin is only allowed to edit its own code once both reviewers approve the same patch.")
                     print("(rerun with --allow-consult-override to permit the 4-model consensus path instead)")
                     return
 
@@ -387,7 +387,7 @@ async def cmd_improve(
 
 
 async def cmd_auto_fix(registry: ModelRegistry, router: Router):
-    goal = input("What should Smeagol add to its own code, or fix, or learn to do? ").strip()
+    goal = input("What should Gremlin add to its own code, or fix, or learn to do? ").strip()
     if not goal:
         print("Cancelled -- nothing to do.")
         return
@@ -476,7 +476,7 @@ async def main():
         if len(sys.argv) > 2 and sys.argv[2] == "--hf":
             query = sys.argv[3] if len(sys.argv) > 3 else ""
             if not query:
-                print('Usage: smeagol models --hf "search terms"')
+                print('Usage: gremlin models --hf "search terms"')
                 return
             cmd_models_hf(query)
             return

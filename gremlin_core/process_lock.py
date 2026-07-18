@@ -1,8 +1,8 @@
 """
-Guards against two separate smeagol processes mutating the same git
+Guards against two separate gremlin processes mutating the same git
 repo at once -- e.g. the desktop GUI's "Auto-fix" button spawns a new
-terminal running `smeagol auto-fix` in its own process, and nothing
-stops you from also running `smeagol improve` or `smeagol edit`
+terminal running `gremlin auto-fix` in its own process, and nothing
+stops you from also running `gremlin improve` or `gremlin edit`
 yourself in a different terminal at the same time. An in-process
 asyncio.Lock wouldn't help here at all: it only serializes concurrent
 coroutines inside ONE process's event loop, and these are two
@@ -26,11 +26,11 @@ class AlreadyRunning(Exception):
 
 @contextmanager
 def git_mutation_lock(root: str):
-    """Raises AlreadyRunning immediately if another smeagol process
+    """Raises AlreadyRunning immediately if another gremlin process
     already holds the lock for this project -- never blocks waiting."""
     lock_dir = Path(root) / "data"
     lock_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = lock_dir / ".smeagol.lock"
+    lock_path = lock_dir / ".gremlin.lock"
 
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
     try:
@@ -38,7 +38,7 @@ def git_mutation_lock(root: str):
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise AlreadyRunning(
-                "another smeagol process is already changing files in this project "
+                "another gremlin process is already changing files in this project "
                 "(self-improve, edit, or auto-fix) -- wait for it to finish before starting another"
             )
         yield

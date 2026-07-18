@@ -1,5 +1,5 @@
 """
-The gate a proposed self-edit must pass before Smeagol is allowed to
+The gate a proposed self-edit must pass before Gremlin is allowed to
 apply it: two different models each review the diff independently, and
 BOTH have to approve. If either rejects it, their specific feedback
 goes back to a fixer model, the patch gets revised, and review restarts

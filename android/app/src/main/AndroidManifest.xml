@@ -23,7 +23,7 @@
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
-        android:theme="@style/Theme.Smeagol"
+        android:theme="@style/Theme.Gremlin"
         android:usesCleartextTraffic="true">
         <!-- usesCleartextTraffic: this talks to a plain http server on
              your own LAN, not https. Fine for a local personal setup,
@@ -43,6 +43,6 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
-            android:label="Smeagol Settings" />
+            android:label="Gremlin Settings" />
     </application>
 </manifest>

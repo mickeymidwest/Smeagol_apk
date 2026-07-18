@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="smeagol_bg">#0D1512</color>
-    <color name="smeagol_surface">#132019</color>
-    <color name="smeagol_accent">#7DFFCF</color>
-    <color name="smeagol_text_primary">#CFECE2</color>
-    <color name="smeagol_text_secondary">#9FD9C8</color>
+    <color name="gremlin_bg">#0D1512</color>
+    <color name="gremlin_surface">#132019</color>
+    <color name="gremlin_accent">#7DFFCF</color>
+    <color name="gremlin_text_primary">#CFECE2</color>
+    <color name="gremlin_text_secondary">#9FD9C8</color>
 </resources>

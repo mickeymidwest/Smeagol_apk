@@ -1,5 +1,5 @@
 """
-A structured record of every successful code change Smeagol has made
+A structured record of every successful code change Gremlin has made
 to itself (self_improve.py) or to a script it was asked to fix
 (script_edit.py) -- separate from git history and backup files, this
 is meant to be easy to scan or query later: what changed, why, and

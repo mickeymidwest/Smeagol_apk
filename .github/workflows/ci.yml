@@ -35,13 +35,13 @@ jobs:
           pip install -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
       - name: Compile check
-        run: python -m py_compile main.py smeagol_core/*.py smeagol_core/backends/*.py gui/app.py
+        run: python -m py_compile main.py gremlin_core/*.py gremlin_core/backends/*.py gui/app.py
 
       - name: Import check (catches missing-dependency issues py_compile alone can't)
         run: |
           python -c "
           import main
-          from smeagol_core import (
+          from gremlin_core import (
               registry, router, persona, consult, self_improve, script_edit,
               review, sandbox, server, model_scan, hf_hub, mutation_log,
               away_sync, process_lock, status,
@@ -52,7 +52,7 @@ jobs:
       - name: Config actually loads
         run: |
           python -c "
-          from smeagol_core.registry import ModelRegistry
+          from gremlin_core.registry import ModelRegistry
           reg = ModelRegistry.from_yaml('config/models.yaml')
           print('registry builds:', reg.names())
           "

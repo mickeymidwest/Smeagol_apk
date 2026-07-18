@@ -4,11 +4,11 @@
 # Generated at runtime, not source
 data/*.jsonl
 data/*.txt
-data/.smeagol.lock
-*.smeagol-backup-*
+data/.gremlin.lock
+*.gremlin-backup-*
 
 # Downloaded model weights -- large binaries, not source, and can
-# always be re-downloaded via `smeagol models` / `smeagol models --hf`
+# always be re-downloaded via `gremlin models` / `gremlin models --hf`
 models/*.gguf
 
 # Standard Python/venv noise

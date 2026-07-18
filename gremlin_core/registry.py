@@ -69,7 +69,7 @@ class ModelRegistry:
 
         persona_cfg = cfg.get("persona")
         if persona_cfg:
-            persona_name = persona_cfg.get("name", "smeagol").lower()
+            persona_name = persona_cfg.get("name", "gremlin").lower()
             primary_name = persona_cfg["primary_model"]
             fallback_names = persona_cfg.get("fallback_models", [])
             last_resort_name = persona_cfg.get("last_resort_model")

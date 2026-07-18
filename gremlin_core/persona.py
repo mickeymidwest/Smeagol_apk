@@ -1,16 +1,16 @@
 """
-Gives Smeagol a persistent identity that's decoupled from whichever
+Gives Gremlin a persistent identity that's decoupled from whichever
 backend model happens to be answering underneath it.
 
-Talking to "smeagol" always gets the same name, personality, and system
+Talking to "gremlin" always gets the same name, personality, and system
 prompt back -- regardless of whether the actual generation came from
 your local Dolphin model, Claude, or Gemini. Swap `primary_model` in
-config/models.yaml and every interaction with "smeagol" is instantly
+config/models.yaml and every interaction with "gremlin" is instantly
 backed by a different engine, with zero change to how you talk to it.
 
 It also fails over: if the primary model errors out (API down, local
 model crashed, etc.), it automatically tries each fallback in order
-before giving up, so Smeagol staying "up" doesn't depend on any single
+before giving up, so Gremlin staying "up" doesn't depend on any single
 backend staying up.
 """
 from __future__ import annotations
@@ -62,7 +62,7 @@ class PersonaBackend(ModelBackend):
                 prompt, system=combined_system, max_tokens=max_tokens, temperature=temperature
             )
             if result.ok:
-                # Always answer AS Smeagol -- the caller shouldn't need to
+                # Always answer AS Gremlin -- the caller shouldn't need to
                 # know or care which underlying model actually ran.
                 return GenerationResult(
                     model=self.info.name,

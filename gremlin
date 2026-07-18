@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Lets you run `smeagol <command>` instead of `python main.py <command>`.
+# Lets you run `gremlin <command>` instead of `python main.py <command>`.
 #
 # One-time setup:
-#   chmod +x smeagol
-#   sudo ln -s "$(pwd)/smeagol" /usr/local/bin/smeagol
+#   chmod +x gremlin
+#   sudo ln -s "$(pwd)/gremlin" /usr/local/bin/gremlin
 # (or add this project directory to your PATH some other way)
 #
-# After that: `smeagol models`, `smeagol chat smeagol`, etc. work from
+# After that: `gremlin models`, `gremlin chat gremlin`, etc. work from
 # anywhere, and always run against this project's venv + config.
 
 # readlink -f resolves the symlink to its real target FIRST -- without
