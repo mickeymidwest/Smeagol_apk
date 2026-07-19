@@ -276,6 +276,13 @@ async def _consult_and_learn_inner(
         "prompt": prompt,
         "primary_uncertain_answer": primary_result.text,
         "consulted_models": list(confident.keys()),
+        # Raw per-model text, not just names -- the actual distillation
+        # material for fine-tuning Gremlin's own primary model on what
+        # the consult group contributed. final_answer (below) stays the
+        # training target, since that's already in Gremlin's own voice;
+        # this is kept alongside it for inspection/debugging, not as
+        # something a dataset builder should train on directly.
+        "consulted_texts": {name: r.text for name, r in confident.items()},
         "escalated_to_last_resort": escalated,
         "final_answer": final_answer,
     })

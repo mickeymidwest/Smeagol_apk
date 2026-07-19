@@ -29,6 +29,9 @@ Usage (after `chmod +x gremlin` and putting it on your PATH):
   gremlin list-snapshots          -- list BTRFS snapshots (via snapper)
   gremlin rollback-to <number>    -- roll back to a snapshot and reboot (requires sudo
     password cached via set-sudo-password)
+  gremlin build-training-set      -- turn data/learning_log.jsonl (every time a consult
+    was needed) into data/training_set.jsonl + data/eval_set.jsonl, for fine-tuning
+    Gremlin's own primary model on what the consult group has contributed over time.
 
 Or directly: python main.py <command> ...
 """
@@ -48,6 +51,7 @@ from gremlin_core import server
 from gremlin_core import hf_hub
 from gremlin_core import root_exec
 from gremlin_core import snapshots as snapshots_mod
+from gremlin_core import finetune
 from gremlin_core.process_lock import git_mutation_lock, AlreadyRunning
 
 try:
@@ -313,6 +317,18 @@ async def cmd_rollback_to(number: str, skip_confirm: bool = False):
             return
     ok, message = await snapshots_mod.rollback_to(number, PROJECT_ROOT)
     print(message)
+
+
+def cmd_build_training_set():
+    result = finetune.write_training_set(PROJECT_ROOT)
+    print(f"Wrote {result['train_count']} training example(s) to {result['train_path']}")
+    print(f"Wrote {result['eval_count']} held-out eval example(s) to {result['eval_path']}")
+    if result["train_count"] == 0:
+        print(
+            "Nothing here yet -- these come from data/learning_log.jsonl, which only "
+            "gets an entry each time Gremlin's own answer was uncertain and a consult "
+            "was needed. Chat with Gremlin a bit more first."
+        )
 
 
 async def cmd_list(registry: ModelRegistry):
@@ -594,6 +610,10 @@ async def main():
             print("Usage: gremlin rollback-to <number>")
             return
         await cmd_rollback_to(sys.argv[2])
+        return
+
+    if cmd == "build-training-set":
+        cmd_build_training_set()
         return
 
     registry = ModelRegistry.from_yaml(CONFIG_PATH)
