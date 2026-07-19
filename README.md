@@ -205,9 +205,17 @@ rest of this README/config's comments assume by default:
   `mlabonne/gemma-3-12b-it-abliterated` and
   `huihui-ai/gemma-3-12b-it-abliterated`. Didn't check quant
   availability on either yet -- do that alongside picking one.
-- **qwen3-coder**: not yet re-confirmed with an exact repo -- the
-  original `models --hf "Qwen3 Coder abliterated"` search term still
-  applies as-is.
+- **qwen3-coder**: base abliterated model is `huihui-ai/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated`
+  (MoE, 30B total/~3B active params) -- huihui-ai didn't publish their
+  own GGUF for this one, but `mradermacher/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated-GGUF`
+  and the imatrix variant `mradermacher/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated-i1-GGUF`
+  both have it. **This is meaningfully bigger than the other 4 models**
+  -- even the smallest practical 4-bit quant (i1-IQ4_XS) is ~16.4GB,
+  double the 8GB VRAM available. Every quant here needs heavy CPU/RAM
+  offload and will run noticeably slower than the rest -- worth
+  deciding whether that tradeoff (slow but full quality-ish) is worth
+  it versus a smaller/lower quant (IQ2 range, lower quality, still
+  likely over 8GB alone) before downloading ~16GB+ for this one.
 - **deepseek-r1-distill-8b**: no exact "Qwen-8B" distill actually
   exists upstream. The two real closest options are
   `huihui-ai/DeepSeek-R1-Distill-Qwen-7B-abliterated` and
