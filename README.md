@@ -206,7 +206,11 @@ corrected, verified ones.
   Q2/Q3-range option exists here). Needs partial CPU/RAM offload
   (`n_gpu_layers` less than full) to run at all, same situation as
   qwen3-coder below, not the "realistic pick for 8GB" an earlier note
-  here claimed.
+  here claimed. **Smaller alternative, verified real:**
+  `bartowski/Meta-Llama-3-8B-Instruct-abliterated-v3-GGUF`
+  (repacking failspy's well-known Llama-3-8B abliteration), `Q4_K_M.gguf`
+  is **4.58GB**. Not the same model family as gpt-oss, but comparable
+  general-purpose conversational competence at a quarter the size.
 - **gemma-3-12b**: `mlabonne/gemma-3-12b-it-abliterated-GGUF` (the
   original author's own first-party GGUF -- prefer this over
   third-party rehosts). `q3_k_m.gguf` is **5.60GB** (comfortable
@@ -218,9 +222,11 @@ corrected, verified ones.
   `mradermacher/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated-GGUF`
   (or the `-i1-GGUF` imatrix variant). **Meaningfully bigger than
   everything else here** -- smallest practical quant (i1-IQ4_XS) is
-  ~16.4GB, double the whole VRAM budget. Needs heavy CPU/RAM offload,
-  will run noticeably slower. Worth deciding if that tradeoff is worth
-  it before downloading 16GB+ for this one.
+  ~16.4GB, double the whole VRAM budget. **Smaller alternative,
+  verified real:** `bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF`,
+  `Q4_K_M.gguf` is **4.36GB** or `Q5_K_M.gguf` is **5.07GB** for a bit
+  more quality. Qwen2.5 rather than Qwen3, and dense rather than MoE,
+  but still a genuinely strong coding model at a fraction of the size.
 - **deepseek-r1-distill-8b**: no exact "Qwen-8B" distill exists
   upstream. Recommended: `mradermacher/DeepSeek-R1-Distill-Qwen-7B-abliterated-GGUF`,
   `Q4_K_M.gguf` is **4.36GB** -- the smallest and most comfortable fit
@@ -228,32 +234,37 @@ corrected, verified ones.
   lineage instead: `mradermacher/Josiefied-DeepSeek-R1-0528-Qwen3-8B-abliterated-v1-GGUF`
   (not size-checked).
 
-**Correction to an earlier version of this section:** I'd previously
-written that qwythos-9b had no Q4-range quant and that gpt-oss-20b's
-IQ4_NL "is the realistic pick for 8GB" -- both were based on an
-AI-summarized read of the repo pages rather than the actual file
-listing, and both were wrong (opposite of each other, in fact: the
-first genuinely-small quant DOES exist for qwythos-9b, and does NOT
-exist for gpt-oss-20b). Corrected above with real byte-exact sizes.
-Worth being skeptical of specific quant/size claims from any source
-(including me, apparently) that doesn't cite the actual file listing.
+**Two rounds of corrections to this section, both worth remembering:**
+(1) I'd first written that qwythos-9b had no Q4-range quant and that
+gpt-oss-20b's IQ4_NL "is the realistic pick for 8GB" -- both wrong,
+based on an AI-summarized page read rather than the real file listing.
+(2) A pasted suggestion for smaller gpt-oss-20b/qwen3-coder
+replacements included a repo (`huihui-ai/Llama-3-8B-Instruct-Abliterated-GGUF`)
+that doesn't exist at all -- corrected above to the real bartowski
+repo. **Every specific repo/size claim in this section has now been
+checked against `huggingface.co/api/models/{repo}` (real file listing)
+plus a HEAD request for the real `Content-Length` -- not taken from
+any single source (including me) at face value.**
 
-**Architectural gap found above -- now fixed.** Two changes:
-`LlamaCppBackend` now unloads a local model (frees its VRAM/RAM) after
-it's sat idle for 90s, via a background sweep (`gremlin_core/eviction.py`)
-that runs automatically inside `gremlin serve` -- it never touches
-whichever model is currently `primary_model`, only consult/fallback
-locals. And `Router.broadcast` (what a consult round actually calls)
-no longer runs local GGUF models concurrently with each other -- they
-run one at a time now, since nothing shares VRAM between two models
-loading at once on the same card; API backends (claude/gemini) still
-run in parallel with each other, since they don't compete for local
-VRAM at all. Together these mean the *scheduling* side of the OOM risk
-is handled -- what they do NOT do is make an individually-oversized
-model fit: gpt-oss-20b (11.78GB) and qwen3-coder (~16.4GB+) are still
-bigger than this card's 8GB budget on their own, regardless of
-scheduling, and need `n_gpu_layers` reduced in `config/models.yaml` for
-partial CPU/RAM offload if you want to run them at all.
+**The actual VRAM math, worked through properly:** qwythos-9b (primary)
+sits resident at 5.38GB, leaving only ~2.6GB free on an 8GB card.
+**Every consult model here, even the smallest at 4.36GB, is bigger than
+that remainder** -- this isn't a problem limited to the two oversized
+ones, it's true of all four consult models given the primary's own
+footprint. The fix (commit history below): `consult_and_learn`
+(`gremlin_core/consult.py`) now unloads the primary right before
+running any local consult model, and it reloads automatically the next
+time it's actually needed (the synthesis step right after, or the next
+message). Combined with the earlier fixes -- `Router.broadcast` no
+longer runs local models concurrently with each other, and
+`gremlin_core/eviction.py` unloads an idle non-primary local model
+after 90s -- consults on this card should now actually fit, at the
+cost of a real, felt latency hit: every consult now pays a primary
+reload (a few seconds, disk-speed dependent) it didn't pay before. Two
+individually-oversized models (gpt-oss-20b, qwen3-coder) still don't
+fit alone regardless of any of this scheduling -- that's a
+`n_gpu_layers`/model-choice matter, not something scheduling can solve,
+which is exactly why the smaller alternatives above exist.
 
 ## Next steps (once the desktop is set up)
 

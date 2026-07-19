@@ -240,7 +240,20 @@ async def _consult_and_learn_inner(
             "contributors": [],
         }
 
-    # Uncertain -- first pass: the general consult group (typically local models)
+    # Uncertain -- first pass: the general consult group (typically local models).
+    # Free the primary's VRAM first if any of them are local GGUF models --
+    # on a card where primary + even one local consult model wouldn't both
+    # fit resident at once (the common case on 8GB: see README's "Confirmed
+    # model sources"), this is what actually lets the consult run at all,
+    # not just what keeps VRAM from accumulating over time (eviction.py's
+    # job). The primary reloads on its own via the normal warmup() path the
+    # next time it's used -- the synthesis call a few lines down, or the
+    # next message if nobody had a confident answer at all.
+    if consult_models and any(router.registry.get(n).info.kind == "local_gguf" for n in consult_models):
+        primary_name = router.registry.primary_model_name()
+        if primary_name:
+            await router.registry.get(primary_name).unload()
+
     consult_results = await router.broadcast(consult_models, prompt) if consult_models else {}
     confident = _confident_results(consult_results)
     escalated = False
