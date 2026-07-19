@@ -5,6 +5,7 @@ via llama-cpp-python. Runs fully offline, no network calls.
 
 from __future__ import annotations
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -33,13 +34,23 @@ class LlamaCppBackend(ModelBackend):
         self.n_threads = n_threads
         self.chat_format = chat_format
         self._llm: Optional["Llama"] = None
-        self._lock = asyncio.Lock()  # llama.cpp isn't safely reentrant per-instance
+        self._last_used: float = 0.0
+        self._lock = asyncio.Lock()  # llama.cpp isn't safely reentrant per-instance --
+        # also now the one thing serializing load/generate/unload against
+        # each other, so unload() can never race a generate() that's
+        # mid-flight (see unload() below).
         # Dedicated single-thread pool so this model never waits behind
         # unrelated work competing for the event loop's shared default
         # executor -- each local model gets its own lane.
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"llamacpp-{info.name}")
 
-    async def warmup(self) -> None:
+    async def _ensure_loaded(self) -> None:
+        """Must be called while holding self._lock. Split out of
+        warmup() so generate() can load-and-use atomically under the
+        same lock unload() also uses, instead of the previous
+        lock-free warmup() (which had a real, if narrow, race: nothing
+        stopped unload() from clearing self._llm between warmup()
+        returning and the actual inference call reading it)."""
         if self._llm is not None:
             return
         if Llama is None:
@@ -60,6 +71,11 @@ class LlamaCppBackend(ModelBackend):
             )
 
         self._llm = await loop.run_in_executor(self._executor, _load)
+        self._last_used = time.monotonic()
+
+    async def warmup(self) -> None:
+        async with self._lock:
+            await self._ensure_loaded()
 
     async def generate(
         self,
@@ -69,7 +85,6 @@ class LlamaCppBackend(ModelBackend):
         temperature: float = 0.7,
     ) -> GenerationResult:
         try:
-            await self.warmup()
             messages = []
             if system:
                 messages.append({"role": "system", "content": system})
@@ -78,6 +93,8 @@ class LlamaCppBackend(ModelBackend):
             loop = asyncio.get_event_loop()
 
             async with self._lock:
+                await self._ensure_loaded()
+
                 def _run():
                     return self._llm.create_chat_completion(
                         messages=messages,
@@ -86,11 +103,32 @@ class LlamaCppBackend(ModelBackend):
                     )
 
                 result = await loop.run_in_executor(self._executor, _run)
+                self._last_used = time.monotonic()
 
             text = result["choices"][0]["message"]["content"]
             return GenerationResult(model=self.info.name, text=text)
         except Exception as e:
             return GenerationResult(model=self.info.name, text="", error=str(e))
+
+    async def unload(self) -> None:
+        """Frees this model's VRAM/RAM (drops the loaded llama.cpp
+        instance) without shutting down the executor -- the backend
+        stays fully usable, the next generate() call just reloads via
+        _ensure_loaded(). Called by gremlin_core.eviction's idle sweep
+        (see server.py's serve()), never automatically after a single
+        use -- an idle timeout, not "unload immediately," so a model
+        used twice in quick succession doesn't pay reload cost twice."""
+        async with self._lock:
+            self._llm = None
+
+    def idle_seconds(self) -> float:
+        """0.0 whenever nothing is actually loaded (nothing to evict,
+        same as "don't evict" -- the eviction sweep never needs a
+        separate is-loaded check), otherwise real elapsed time since
+        the last generate()/load."""
+        if self._llm is None:
+            return 0.0
+        return time.monotonic() - self._last_used
 
     async def close(self) -> None:
         self._llm = None

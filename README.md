@@ -17,10 +17,12 @@ setup below, then (each independently skippable) sets up BTRFS
 snapshots + `grub-btrfs` for remote rollback, disables KDE Plasma's
 sleep/lock-screen/login-screen so the machine never strands itself
 waiting for someone to physically sit down at it, caches a sudo
-password for running root commands remotely, and installs `gremlin
-serve` as an auto-starting systemd service. See "Root commands and
-rolling back if something breaks" and "Auto-start on boot" below for
-what each of those actually does.
+password for running root commands remotely, installs `gremlin serve`
+as an auto-starting systemd service, and sets up a timer that
+auto-pulls new commits from GitHub and restarts the service to pick
+them up. See "Root commands and rolling back if something breaks",
+"Auto-start on boot", and "Auto-updating from GitHub" below for what
+each of those actually does.
 
 **Starting from nothing, without the headless extras** (nothing cloned yet):
 ```bash
@@ -236,20 +238,22 @@ exist for gpt-oss-20b). Corrected above with real byte-exact sizes.
 Worth being skeptical of specific quant/size claims from any source
 (including me, apparently) that doesn't cite the actual file listing.
 
-**Real architectural gap worth knowing about, not yet fixed:**
-`gremlin_core/backends/llamacpp_backend.py`'s `warmup()` loads a local
-model once and keeps it resident in VRAM for the rest of the process's
-life -- there's no automatic unload after a consult finishes anywhere
-in this codebase. In a long-running `gremlin serve`, if consults over
-time touch several different local models, they all stay loaded
-simultaneously, stacking their VRAM use. Given the sizes above (even
-qwythos-9b + gemma-3-12b alone is ~11GB, over budget), running this
-full 5-model setup for real on 8GB will likely hit an out-of-memory
-error once more than one non-primary local model gets warmed up in the
-same server process -- this is NOT solved by picking smaller quants
-alone. Worth treating as a real next step (e.g. unload an idle local
-model after N seconds, or cap how many non-primary models can be
-resident at once) rather than something to discover the hard way.
+**Architectural gap found above -- now fixed.** Two changes:
+`LlamaCppBackend` now unloads a local model (frees its VRAM/RAM) after
+it's sat idle for 90s, via a background sweep (`gremlin_core/eviction.py`)
+that runs automatically inside `gremlin serve` -- it never touches
+whichever model is currently `primary_model`, only consult/fallback
+locals. And `Router.broadcast` (what a consult round actually calls)
+no longer runs local GGUF models concurrently with each other -- they
+run one at a time now, since nothing shares VRAM between two models
+loading at once on the same card; API backends (claude/gemini) still
+run in parallel with each other, since they don't compete for local
+VRAM at all. Together these mean the *scheduling* side of the OOM risk
+is handled -- what they do NOT do is make an individually-oversized
+model fit: gpt-oss-20b (11.78GB) and qwen3-coder (~16.4GB+) are still
+bigger than this card's 8GB budget on their own, regardless of
+scheduling, and need `n_gpu_layers` reduced in `config/models.yaml` for
+partial CPU/RAM offload if you want to run them at all.
 
 ## Next steps (once the desktop is set up)
 
@@ -741,6 +745,35 @@ modern boards boot fine with no monitor attached, but a few older ones
 refuse to POST without a display detected. If yours does that, a cheap
 HDMI dummy plug fixes it -- not a Gremlin issue, that's motherboard
 firmware behavior from before any of this software runs.
+
+## Auto-updating from GitHub
+
+`install-all.sh` also offers to set this up: a `systemd --user` timer
+(`deploy/gremlin-update.timer` + `.service`) checks `origin/main` every
+15 minutes, and if there's anything new, pulls it and restarts
+`gremlin.service` so the update actually takes effect -- no need to SSH
+in and pull by hand every time a change gets pushed. Pulling from a
+public GitHub repo needs no token/authentication at all, so this keeps
+working indefinitely; it has nothing to do with how long any particular
+push-side access token stays valid.
+
+Safe by construction: it only ever fast-forwards (`git pull --ff-only`).
+If the working tree has local changes that would conflict, the pull
+fails cleanly and logs it -- nothing here ever overwrites or discards
+anything on its own.
+
+To set it up by hand instead of via `install-all.sh`:
+```bash
+chmod +x deploy/gremlin-update.sh
+sed -e "s|^WorkingDirectory=.*|WorkingDirectory=$(pwd)|" \
+    -e "s|^ExecStart=.*|ExecStart=$(pwd)/deploy/gremlin-update.sh|" \
+    deploy/gremlin-update.service > ~/.config/systemd/user/gremlin-update.service
+cp deploy/gremlin-update.timer ~/.config/systemd/user/gremlin-update.timer
+systemctl --user daemon-reload
+systemctl --user enable --now gremlin-update.timer
+```
+Check it: `systemctl --user status gremlin-update.timer`, logs via
+`journalctl --user -u gremlin-update -f`.
 
 ## Desktop hologram widget
 

@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically check for and pull Gremlin updates from GitHub
+
+[Timer]
+# Every 15 minutes -- frequent enough to pick up a same-session push
+# without much delay, infrequent enough not to hammer GitHub's API for
+# what's almost always going to be "nothing new."
+OnBootSec=2min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target

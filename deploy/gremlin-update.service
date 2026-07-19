@@ -1,0 +1,9 @@
+[Unit]
+Description=Check for and pull Gremlin updates from GitHub
+
+[Service]
+Type=oneshot
+# Filled in by install-all.sh -- see gremlin.service's WorkingDirectory
+# for the same pattern. Edit these two if installing by hand instead.
+WorkingDirectory=/home/YOUR_USERNAME/Downloads/gremlin
+ExecStart=/home/YOUR_USERNAME/Downloads/gremlin/deploy/gremlin-update.sh

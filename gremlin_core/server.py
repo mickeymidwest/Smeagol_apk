@@ -34,6 +34,7 @@ from .registry import ModelRegistry
 from .router import Router
 from . import consult
 from . import away_sync
+from . import eviction
 from . import model_scan
 from . import mutation_log
 from . import root_exec
@@ -342,6 +343,13 @@ def serve(registry: ModelRegistry, router: Router, project_root: str, port: int 
     admin_token = get_or_create_admin_token(data_dir)
     loop = start_background_loop()
     app = create_app(registry, router, root, loop, token, admin_token)
+
+    # Idle-unload sweep for local GGUF consult/fallback models -- keeps
+    # VRAM from just accumulating over the life of this process. Never
+    # touches the primary model (see eviction.py). Scheduled on the same
+    # background loop everything else already runs on, not a separate
+    # thread -- nothing here needs its own.
+    asyncio.run_coroutine_threadsafe(eviction.evict_idle_models(registry), loop)
 
     lan_ip = get_lan_ip()
     url = pairing_url(lan_ip, port, token)

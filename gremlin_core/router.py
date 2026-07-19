@@ -45,11 +45,33 @@ class Router:
     async def broadcast(
         self, model_names: list[str], prompt: str, system: Optional[str] = None, **kw
     ) -> dict[str, GenerationResult]:
-        backends = [self.registry.get(name) for name in model_names]
-        results = await asyncio.gather(
-            *(b.generate(prompt, system=system, **kw) for b in backends)
-        )
-        return {r.model: r for r in results}
+        """API backends (claude, gemini, ...) don't compete for local
+        VRAM, so they still run together for speed. Local GGUF backends
+        DO share the same limited GPU memory -- nothing here shares VRAM
+        between concurrently-loading models, so running two at once on a
+        constrained card (e.g. 8GB) risks an out-of-memory error that has
+        nothing to do with which quant was picked. Those run one at a
+        time instead: slower, but the thing that's actually supposed to
+        work reliably. See gremlin_core.eviction for the other half of
+        this -- unloading a local model once it's been idle a while, so
+        VRAM doesn't just accumulate across many separate consults."""
+        named = [(name, self.registry.get(name)) for name in model_names]
+        local = [(n, b) for n, b in named if b.info.kind == "local_gguf"]
+        remote = [(n, b) for n, b in named if b.info.kind != "local_gguf"]
+
+        results: dict[str, GenerationResult] = {}
+
+        if remote:
+            remote_results = await asyncio.gather(
+                *(b.generate(prompt, system=system, **kw) for _, b in remote)
+            )
+            for (name, _), r in zip(remote, remote_results):
+                results[name] = r
+
+        for name, b in local:
+            results[name] = await b.generate(prompt, system=system, **kw)
+
+        return results
 
     async def plan_and_build(
         self,

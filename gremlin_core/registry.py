@@ -1,6 +1,6 @@
 from __future__ import annotations
 import yaml
-from typing import Dict
+from typing import Dict, Optional
 
 from .backends.base import ModelBackend, ModelInfo
 from .backends.llamacpp_backend import LlamaCppBackend
@@ -111,6 +111,18 @@ class ModelRegistry:
             if b.info.kind == "persona":
                 return list(getattr(b, "consult_model_names", []))
         return []
+
+    def primary_model_name(self) -> Optional[str]:
+        """The persona's primary backend's own registered name (e.g.
+        "qwythos-9b"), regardless of what the persona itself is named --
+        used by gremlin_core.eviction to make sure the idle-unload sweep
+        never evicts the one model that's supposed to always stay
+        resident for instant responses."""
+        for b in self.backends.values():
+            if b.info.kind == "persona":
+                primary = getattr(b, "primary", None)
+                return primary.info.name if primary else None
+        return None
 
     async def close_all(self):
         for b in self.backends.values():

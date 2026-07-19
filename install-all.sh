@@ -205,6 +205,23 @@ if [[ ! "$SETUP_SERVICE" =~ ^[Nn]$ ]]; then
     echo "[+] gremlin.service enabled -- check status with: systemctl --user status gremlin"
 fi
 
+# --- 8. Auto-pull updates from GitHub -- picks up new commits without needing to SSH in ---
+echo
+read -rp "Auto-check GitHub for updates every 15 min and pull + restart when found? (Y/n): " SETUP_AUTOUPDATE
+if [[ ! "$SETUP_AUTOUPDATE" =~ ^[Nn]$ ]]; then
+    chmod +x deploy/gremlin-update.sh
+    mkdir -p ~/.config/systemd/user
+    sed -e "s|^WorkingDirectory=.*|WorkingDirectory=$GREMLIN_DIR|" \
+        -e "s|^ExecStart=.*|ExecStart=$GREMLIN_DIR/deploy/gremlin-update.sh|" \
+        deploy/gremlin-update.service > ~/.config/systemd/user/gremlin-update.service
+    cp deploy/gremlin-update.timer ~/.config/systemd/user/gremlin-update.timer
+    systemctl --user daemon-reload
+    systemctl --user enable --now gremlin-update.timer
+    echo "[+] gremlin-update.timer enabled -- check status with: systemctl --user status gremlin-update.timer"
+    echo "    Pulls only fast-forward (git pull --ff-only) -- never overwrites local changes,"
+    echo "    fails cleanly instead if the working tree has diverged."
+fi
+
 echo
 echo "=== All-in-one install complete ==="
 echo

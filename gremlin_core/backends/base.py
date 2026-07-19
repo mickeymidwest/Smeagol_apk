@@ -57,3 +57,20 @@ class ModelBackend(ABC):
     async def close(self) -> None:
         """Optional: release resources (unload model, close client)."""
         return None
+
+    async def unload(self) -> None:
+        """Optional: drop loaded weights to free VRAM/RAM while keeping
+        the backend itself usable -- unlike close(), which ends the
+        backend's life for good, this is meant to be followed by
+        another generate() call later, which just re-loads via
+        warmup(). No-op by default (API backends hold no local
+        resources); see LlamaCppBackend for the real implementation."""
+        return None
+
+    def idle_seconds(self) -> float:
+        """Optional: how long since this backend last actually ran a
+        generation, for idle-eviction purposes (see gremlin_core.eviction).
+        0 by default -- meaning "never idle, don't evict" -- API backends
+        and anything else with nothing worth freeing should leave this
+        as-is rather than implementing it."""
+        return 0.0
