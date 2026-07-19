@@ -131,10 +131,14 @@ class SettingsActivity : AppCompatActivity() {
 
             /desktop <command>
               Run a command on the desktop (sandboxed: confined directory, timeout, no root).
+              e.g. /desktop ls -la
+                   /desktop find /home -iname "*keyword*"
 
             /root <command>
               Same, but with sudo. Needs a sudo password cached first --
               run `gremlin set-sudo-password` on the desktop itself, once.
+              e.g. /root pacman -S --noconfirm neovim
+                   /root pacman -Syu --noconfirm
 
             /reboot
               Shows a confirmation, then /reboot confirm actually reboots the desktop.
@@ -145,6 +149,15 @@ class SettingsActivity : AppCompatActivity() {
             /rollback <number>
               Shows a confirmation, then /rollback <number> confirm rolls the
               desktop back to that snapshot and reboots it.
+
+            Tips:
+            - No shell, so wildcards (*), pipes (|), and && don't work -- just a
+              program plus its own flags/arguments.
+            - pacman -S / -Syu need --noconfirm added, since there's no way to
+              answer its "Proceed? [Y/n]" prompt through this.
+            - Not sure where a file is? /desktop find /home -iname "*name*"
+              searches by partial name. Widening to /desktop find / ... searches
+              everywhere but can be slow and may hit the timeout -- narrower is faster.
 
             All of the above need the Admin token entered below first.
         """.trimIndent()
