@@ -285,17 +285,48 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    /** Slash commands are intercepted before the normal chat path --
-     * /snapshots and /root talk to the desktop's admin-token-gated
-     * routes via GremlinClient, rendered as a visually distinct
-     * "system" turn (see appendSystemTurn), same split as the desktop
-     * chat panel (gui/assets/main.html's handleSlashCommand). */
+    /** Slash commands are intercepted before the normal chat path -- all
+     * of them talk to the desktop's admin-token-gated routes via
+     * GremlinClient, rendered as a visually distinct "system" turn (see
+     * appendSystemTurn) right in this same chat, no need to go into
+     * Settings. Same split as the desktop chat panel
+     * (gui/assets/main.html's handleSlashCommand), plus /desktop and
+     * /reboot here since those are specifically about controlling the
+     * desktop *from the phone* -- redundant on the desktop's own chat,
+     * where you're already sitting at it. */
     private fun handleSlashCommand(message: String) {
         appendUserTurn(message)
         val parts = message.trim().split(Regex("\\s+"))
         val cmd = parts.getOrNull(0) ?: ""
 
         when (cmd) {
+            "/desktop" -> {
+                val command = message.removePrefix("/desktop").trim()
+                if (command.isEmpty()) {
+                    appendSystemTurn("Usage: /desktop <command>", true)
+                } else {
+                    runAdminSlash { gremlinClient.runCommand(command, asRoot = false) }
+                }
+            }
+
+            "/root" -> {
+                val command = message.removePrefix("/root").trim()
+                if (command.isEmpty()) {
+                    appendSystemTurn("Usage: /root <command>", true)
+                } else {
+                    runAdminSlash { gremlinClient.runCommand(command, asRoot = true) }
+                }
+            }
+
+            "/reboot" -> {
+                val confirmed = parts.getOrNull(1) == "confirm"
+                if (!confirmed) {
+                    appendSystemTurn("This reboots the desktop right now. Type \"/reboot confirm\" to proceed.", false)
+                } else {
+                    runAdminSlash { gremlinClient.reboot() }
+                }
+            }
+
             "/snapshots" -> runAdminSlash { gremlinClient.listSnapshots() }
 
             "/rollback" -> {
@@ -314,16 +345,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            "/root" -> {
-                val command = message.removePrefix("/root").trim()
-                if (command.isEmpty()) {
-                    appendSystemTurn("Usage: /root <command>", true)
-                } else {
-                    runAdminSlash { gremlinClient.runAsRoot(command) }
-                }
-            }
-
-            else -> appendSystemTurn("Unknown command: $cmd\nAvailable: /snapshots, /rollback <number>, /root <command>", true)
+            else -> appendSystemTurn(
+                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /reboot, /snapshots, /rollback <number>",
+                true,
+            )
         }
     }
 

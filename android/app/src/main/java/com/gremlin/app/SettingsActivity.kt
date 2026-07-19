@@ -34,6 +34,8 @@ class SettingsActivity : AppCompatActivity() {
             startQrScan()
         }
 
+        findViewById<Button>(R.id.show_commands_button).setOnClickListener { showCommandsReference() }
+
         // Away-mode API key fields, pre-filled with whatever's already saved
         val anthropicInput = findViewById<EditText>(R.id.anthropic_key_input)
         val geminiInput = findViewById<EditText>(R.id.gemini_key_input)
@@ -117,6 +119,41 @@ class SettingsActivity : AppCompatActivity() {
                 .setNegativeButton("Cancel", null)
                 .show()
         }
+    }
+
+    /** Just a reference -- these all run from the chat input on the main
+     * screen (MainActivity.handleSlashCommand), not from here. Kept as
+     * plain text in a dialog rather than a separate screen since it's
+     * static content with nothing to interact with. */
+    private fun showCommandsReference() {
+        val text = """
+            Type these directly in the chat box on the main screen -- no need to come back here.
+
+            /desktop <command>
+              Run a command on the desktop (sandboxed: confined directory, timeout, no root).
+
+            /root <command>
+              Same, but with sudo. Needs a sudo password cached first --
+              run `gremlin set-sudo-password` on the desktop itself, once.
+
+            /reboot
+              Shows a confirmation, then /reboot confirm actually reboots the desktop.
+
+            /snapshots
+              List BTRFS snapshots (for rolling back if something breaks).
+
+            /rollback <number>
+              Shows a confirmation, then /rollback <number> confirm rolls the
+              desktop back to that snapshot and reboots it.
+
+            All of the above need the Admin token entered below first.
+        """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("Gremlin commands")
+            .setMessage(text)
+            .setPositiveButton("Close", null)
+            .show()
     }
 
     private fun runAdminCommand(host: String, port: Int, adminToken: String, command: String, output: TextView) {

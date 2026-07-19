@@ -592,8 +592,7 @@ authorized by the same admin token as everything else above:
 gremlin set-sudo-password      # gremlin clear-sudo-password to remove it
 ```
 
-Then, from the chat panel (desktop or phone -- same slash commands on
-both):
+Then, from the chat input -- desktop and phone both understand:
 - `/root <command>` -- runs `<command>` with `sudo`, using the cached
   password.
 - `/snapshots` -- lists BTRFS snapshots (requires `snapper`, set up by
@@ -606,6 +605,20 @@ both):
   hardware (IPMI/KVM-over-IP) most desktops don't have. `snapper
   rollback` sidesteps that: it swaps which subvolume boots next time,
   no GRUB interaction needed.
+
+The **phone app** additionally understands two more, right in the same
+chat box -- no need to open Settings first:
+- `/desktop <command>` -- runs `<command>` on the desktop without
+  `sudo` (the plain sandboxed `/admin/execute`, same as Settings' "Run
+  on Desktop" box).
+- `/reboot` then `/reboot confirm` -- reboots the desktop (same
+  endpoint as Settings' "Reboot Desktop" button).
+
+(Not added to the desktop's own chat panel -- `/desktop`/`/reboot` are
+specifically for controlling the desktop *from the phone*; redundant
+when you're already sitting at the machine.) All of these need the
+admin token entered in the phone app's Settings first -- tap "Gremlin
+commands" there for a quick in-app reference of this same list.
 
 Equivalent CLI commands (same thing, run locally): `gremlin
 list-snapshots`, `gremlin rollback-to <number>`.

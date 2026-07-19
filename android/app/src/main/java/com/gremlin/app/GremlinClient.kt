@@ -201,11 +201,13 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
         }
     }
 
-    /** Backs the `/root <command>` slash command -- runs on the desktop
-     * via the cached local sudo password (root_exec.run_as_root), never
-     * prompting or sending a password from the phone. Same admin-token
-     * gating as the Settings screen's existing admin command box. */
-    fun runAsRoot(command: String): AdminResult {
+    /** Backs the `/desktop <command>` and `/root <command>` slash
+     * commands -- the only difference is `as_root`, which routes
+     * through root_exec.run_as_root on the desktop (cached local sudo
+     * password, never sent from the phone) instead of the plain
+     * sandbox. Same admin-token gating as the Settings screen's
+     * existing admin command box either way. */
+    fun runCommand(command: String, asRoot: Boolean): AdminResult {
         val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
         return try {
             val url = URL("http://$host:$port/admin/execute")
@@ -217,7 +219,7 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
             connection.connectTimeout = 8_000
             connection.readTimeout = 130_000
 
-            val body = JSONObject().apply { put("command", command); put("as_root", true) }
+            val body = JSONObject().apply { put("command", command); put("as_root", asRoot) }
             OutputStreamWriter(connection.outputStream).use { it.write(body.toString()) }
 
             val responseCode = connection.responseCode
@@ -232,6 +234,36 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
             }
         } catch (e: Exception) {
             AdminResult(false, "Couldn't reach desktop: ${e.message}")
+        }
+    }
+
+    /** Backs the `/reboot confirm` slash command -- same endpoint and
+     * NOPASSWD-scoped sudoers rule as Settings' existing "Reboot
+     * Desktop" button, just reachable from the chat input too. */
+    fun reboot(): AdminResult {
+        val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
+        return try {
+            val url = URL("http://$host:$port/admin/reboot")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Admin-Token", adminToken)
+            connection.doOutput = true
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 15_000
+            OutputStreamWriter(connection.outputStream).use { it.write("{}") }
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299) {
+                AdminResult(true, "Reboot triggered -- it should come back up and reconnect on its own if auto-start is set up.")
+            } else {
+                AdminResult(false, "Reboot failed (HTTP $responseCode)")
+            }
+        } catch (e: Exception) {
+            // A connection drop here is actually the expected/good
+            // outcome once the reboot really starts -- don't treat every
+            // exception as a failure worth alarming over (same reasoning
+            // as SettingsActivity.triggerReboot).
+            AdminResult(true, "Reboot request sent.")
         }
     }
 
