@@ -14,11 +14,15 @@ Usage (after `chmod +x gremlin` and putting it on your PATH):
   gremlin chat <model_name>
   gremlin broadcast <model1,model2,...> "<prompt>"
   gremlin plan <model1,model2,...> "<task>"
-  gremlin improve <model1,model2,...> "<goal>" [--apply] [--test] [--reviewer-a=NAME] [--reviewer-b=NAME] [--allow-consult-override]
+  gremlin improve <model1,model2,...> "<goal>" [--apply] [--test] [--reviewer-a=NAME] [--reviewer-b=NAME] [--allow-consult-override] [--teach-on-failure] [--teacher=NAME]
     --allow-consult-override: if reviewer-a/reviewer-b (default claude/gemini) don't both
     approve, fall back to checking whether all 4 local consult models (config/models.yaml
     persona.consult_models) unanimously approve instead. Off by default -- must be requested
     explicitly per run.
+    --teach-on-failure: if the applied patch fails to compile or fails a test (a real,
+    concrete failure -- not just "didn't apply cleanly"), --teacher (default claude) explains
+    the mistake and the correction is logged to data/learning_log.jsonl as future fine-tuning
+    material. Never auto-applies the correction. Off by default.
   gremlin auto-fix
   gremlin edit <path> ["<problem description>"]
   gremlin serve [port]           (default: 8765) -- lets the phone app connect
@@ -402,6 +406,8 @@ async def cmd_improve(
     reviewer_b: str,
     allow_consult_override: bool = False,
     consult_models: Optional[list[str]] = None,
+    teach_on_failure: bool = False,
+    teacher_model: str = "claude",
 ):
     print(f"Asking {', '.join(model_names)} to propose changes for: {goal}\n")
     patch = await self_improve.propose_patch(router, model_names, goal, PROJECT_ROOT)
@@ -463,6 +469,7 @@ async def cmd_improve(
             result = await self_improve.apply_patch(
                 outcome.patch, PROJECT_ROOT, goal, applied_by=applied_by,
                 run_tests=run_tests,
+                router=router, teach_on_failure=teach_on_failure, teacher_model=teacher_model,
             )
             print("\n=== Result ===")
             if result["applied"] and result.get("committed"):
@@ -490,15 +497,20 @@ async def cmd_auto_fix(registry: ModelRegistry, router: Router):
         "If claude/gemini don't both approve, allow the 4 local consult models "
         "to approve it instead if they unanimously agree? (y/N): "
     ).strip().lower()
+    teach_input = input(
+        "If the patch fails to compile or fails a test, ask claude to explain the "
+        "mistake and log the correction for future fine-tuning? (y/N): "
+    ).strip().lower()
 
     # Reuses cmd_improve entirely -- auto-fix is a friendlier front door,
     # not a different, lighter-weight path. The two-reviewer gate always
-    # applies first; the consult-consensus override is opt-in per run,
-    # never silent.
+    # applies first; the consult-consensus override and the teacher loop
+    # are both opt-in per run, never silent.
     await cmd_improve(
         router, model_names, goal, do_apply=True, run_tests=(run_tests_input == "y"),
         reviewer_a="claude", reviewer_b="gemini",
         allow_consult_override=(override_input == "y"),
+        teach_on_failure=(teach_input == "y"), teacher_model="claude",
         consult_models=registry.consult_models(),
     )
 
@@ -637,17 +649,22 @@ async def main():
             do_apply = "--apply" in extra_args
             run_tests = "--test" in extra_args
             allow_consult_override = "--allow-consult-override" in extra_args
+            teach_on_failure = "--teach-on-failure" in extra_args
             reviewer_a = "claude"
             reviewer_b = "gemini"
+            teacher_model = "claude"
             for arg in extra_args:
                 if arg.startswith("--reviewer-a="):
                     reviewer_a = arg.split("=", 1)[1]
                 elif arg.startswith("--reviewer-b="):
                     reviewer_b = arg.split("=", 1)[1]
+                elif arg.startswith("--teacher="):
+                    teacher_model = arg.split("=", 1)[1]
             await cmd_improve(
                 router, models, goal, do_apply, run_tests, reviewer_a, reviewer_b,
                 allow_consult_override=allow_consult_override,
                 consult_models=registry.consult_models(),
+                teach_on_failure=teach_on_failure, teacher_model=teacher_model,
             )
         elif cmd == "auto-fix":
             await cmd_auto_fix(registry, router)

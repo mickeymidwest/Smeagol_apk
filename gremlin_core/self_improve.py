@@ -31,6 +31,7 @@ from typing import Optional
 from .router import Router
 from .sandbox import SecureExecutionSandbox
 from . import mutation_log
+from . import teacher
 
 SELF_IMPROVE_SYSTEM_PROMPT = (
     "You are improving the source code of an AI orchestrator called Gremlin. "
@@ -106,6 +107,9 @@ async def apply_patch(
     applied_by: str,
     run_tests: bool = False,
     test_timeout: int = 300,
+    router: Optional[Router] = None,
+    teach_on_failure: bool = False,
+    teacher_model: str = "claude",
 ) -> dict:
     """
     Validates and applies a unified diff against `root`, using git for
@@ -119,6 +123,14 @@ async def apply_patch(
     triggers the same rollback used for a compile failure. Off by
     default since a full suite can be slow or may not exist yet for
     every project state.
+
+    If `teach_on_failure` is True (needs `router`), a real compile or
+    test failure -- the patch actually ran and hit something concrete,
+    not just "didn't apply cleanly" -- gets explained and corrected by
+    `teacher_model` (see teacher.py), logged as future fine-tuning
+    material. Purely a learning signal: the correction is never
+    auto-applied here, and a failed teacher call never blocks returning
+    the original failure result. Off by default, same as run_tests.
     """
     root = str(Path(root).resolve())
 
@@ -164,6 +176,21 @@ async def apply_patch(
             _run(["git", "reset", "--hard", "HEAD"], root)
             _run(["git", "clean", "-fd"], root)
 
+        async def _maybe_teach(error_detail: str) -> None:
+            """Only called on a real, concrete failure (compile error,
+            failing test) -- never on "didn't apply cleanly", which is
+            more of a context-mismatch than something worth teaching
+            from. Best-effort: an unexpected error here should never
+            block returning the actual failure result below."""
+            if not (teach_on_failure and router):
+                return
+            try:
+                await teacher.teach_from_error(
+                    router, teacher_model, task=goal, attempt=patch_text, error=error_detail, root=root,
+                )
+            except Exception:
+                pass
+
         for rel_path in changed:
             if rel_path.endswith(".py"):
                 compile_check = subprocess.run(
@@ -172,6 +199,7 @@ async def apply_patch(
                 )
                 if compile_check.returncode != 0:
                     _revert()
+                    await _maybe_teach(f"{rel_path} failed to compile:\n{compile_check.stderr}")
                     return {
                         "applied": False,
                         "reason": f"reverted -- {rel_path} failed to compile:\n{compile_check.stderr}",
@@ -202,6 +230,7 @@ async def apply_patch(
                         "reason": "reverted -- pytest is not installed (pip install pytest) "
                                   "but run_tests=True was requested",
                     }
+                await _maybe_teach(f"test suite failed:\n{test_run.stdout}\n{test_run.stderr}")
                 return {
                     "applied": False,
                     "reason": f"reverted -- test suite failed:\n{test_run.stdout}\n{test_run.stderr}",
