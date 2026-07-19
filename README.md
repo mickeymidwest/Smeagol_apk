@@ -183,45 +183,73 @@ scan specifically (not just the new Hugging Face path) actually
 completes and registers a model end to end, since that's the feature
 that was silently broken.
 
-## Confirmed model sources (2026-07-19, desktop setup pending)
+## Confirmed model sources (2026-07-19, desktop is an RTX 2070 Super / 8GB VRAM, setup pending)
 
-Exact repos confirmed for the 5 local models, so `models --hf` searches
-land on the right one instead of guessing from a vague search term.
-Quant notes matter here -- two of these don't have a Q4_K_M, which the
-rest of this README/config's comments assume by default:
+Exact repos AND exact file sizes below, checked directly against each
+repo's real file listing (`huggingface.co/api/models/...` + a HEAD
+request on the actual `.gguf` file for its byte size) -- not inferred
+from the quant name or taken from a third party's estimate. Two
+earlier notes in this same section turned out to be wrong when checked
+this way (see the correction callout below); the numbers here are the
+corrected, verified ones.
 
 - **qwythos-9b** (primary): `huihui-ai/Huihui-Qwythos-9B-Claude-Mythos-5-1M-abliterated-GGUF`
-  -- available quants are Q6_K (7.56GB), Q8_0 (9.79GB), BF16. **No
-  Q4_K_M.** On an 8GB card, Q6_K is the only one that could fit at
-  all, and it's tight -- barely any headroom left for context or
-  anything else using the GPU. Worth double-checking the actual files
-  list on the repo page for a smaller quant before committing to Q6_K.
+  -- `...-Q4_K.gguf` is **5.38GB** (confirmed real, despite an earlier
+  note here saying no Q4-range quant existed). That's the pick: fits
+  comfortably in 8GB with real headroom left for context. Q6_K
+  (7.56GB) also exists but is much tighter for no real benefit here.
 - **gpt-oss-20b**: `DavidAU/OpenAi-GPT-oss-20b-abliterated-uncensored-NEO-Imatrix-gguf`
-  -- available quants are IQ4_NL, Q5_1, Q8_0. **No Q4_K_M** either --
-  IQ4_NL is the realistic pick for 8GB. MoE architecture offloads more
-  gracefully than a dense 20B would (per the existing model_scan.py
-  comment), so this one's more forgiving than the raw size suggests.
-- **gemma-3-12b**: two abliterated sources to compare --
-  `mlabonne/gemma-3-12b-it-abliterated` and
-  `huihui-ai/gemma-3-12b-it-abliterated`. Didn't check quant
-  availability on either yet -- do that alongside picking one.
-- **qwen3-coder**: base abliterated model is `huihui-ai/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated`
-  (MoE, 30B total/~3B active params) -- huihui-ai didn't publish their
-  own GGUF for this one, but `mradermacher/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated-GGUF`
-  and the imatrix variant `mradermacher/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated-i1-GGUF`
-  both have it. **This is meaningfully bigger than the other 4 models**
-  -- even the smallest practical 4-bit quant (i1-IQ4_XS) is ~16.4GB,
-  double the 8GB VRAM available. Every quant here needs heavy CPU/RAM
-  offload and will run noticeably slower than the rest -- worth
-  deciding whether that tradeoff (slow but full quality-ish) is worth
-  it versus a smaller/lower quant (IQ2 range, lower quality, still
-  likely over 8GB alone) before downloading ~16GB+ for this one.
-- **deepseek-r1-distill-8b**: no exact "Qwen-8B" distill actually
-  exists upstream. The two real closest options are
-  `huihui-ai/DeepSeek-R1-Distill-Qwen-7B-abliterated` and
-  `huihui-ai/DeepSeek-R1-0528-Qwen3-8B-abliterated` -- pick whichever
-  when you're actually at the search prompt, this needs a real look at
-  both rather than a guess made here.
+  -- smallest available quant, IQ4_NL, is **11.78GB**. **This does not
+  fit on 8GB VRAM at all**, at any quant this specific repo offers (no
+  Q2/Q3-range option exists here). Needs partial CPU/RAM offload
+  (`n_gpu_layers` less than full) to run at all, same situation as
+  qwen3-coder below, not the "realistic pick for 8GB" an earlier note
+  here claimed.
+- **gemma-3-12b**: `mlabonne/gemma-3-12b-it-abliterated-GGUF` (the
+  original author's own first-party GGUF -- prefer this over
+  third-party rehosts). `q3_k_m.gguf` is **5.60GB** (comfortable
+  standalone fit); `q4_k_m.gguf` is **7.30GB** (tight, ~0.7GB headroom
+  only). q3_k_m is the safer pick given it's not the always-resident
+  primary.
+- **qwen3-coder**: base is `huihui-ai/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated`
+  (MoE, 30B total/~3B active) -- no first-party GGUF, use
+  `mradermacher/Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated-GGUF`
+  (or the `-i1-GGUF` imatrix variant). **Meaningfully bigger than
+  everything else here** -- smallest practical quant (i1-IQ4_XS) is
+  ~16.4GB, double the whole VRAM budget. Needs heavy CPU/RAM offload,
+  will run noticeably slower. Worth deciding if that tradeoff is worth
+  it before downloading 16GB+ for this one.
+- **deepseek-r1-distill-8b**: no exact "Qwen-8B" distill exists
+  upstream. Recommended: `mradermacher/DeepSeek-R1-Distill-Qwen-7B-abliterated-GGUF`,
+  `Q4_K_M.gguf` is **4.36GB** -- the smallest and most comfortable fit
+  of any of the 5. Alternative if you'd rather have the newer 0528
+  lineage instead: `mradermacher/Josiefied-DeepSeek-R1-0528-Qwen3-8B-abliterated-v1-GGUF`
+  (not size-checked).
+
+**Correction to an earlier version of this section:** I'd previously
+written that qwythos-9b had no Q4-range quant and that gpt-oss-20b's
+IQ4_NL "is the realistic pick for 8GB" -- both were based on an
+AI-summarized read of the repo pages rather than the actual file
+listing, and both were wrong (opposite of each other, in fact: the
+first genuinely-small quant DOES exist for qwythos-9b, and does NOT
+exist for gpt-oss-20b). Corrected above with real byte-exact sizes.
+Worth being skeptical of specific quant/size claims from any source
+(including me, apparently) that doesn't cite the actual file listing.
+
+**Real architectural gap worth knowing about, not yet fixed:**
+`gremlin_core/backends/llamacpp_backend.py`'s `warmup()` loads a local
+model once and keeps it resident in VRAM for the rest of the process's
+life -- there's no automatic unload after a consult finishes anywhere
+in this codebase. In a long-running `gremlin serve`, if consults over
+time touch several different local models, they all stay loaded
+simultaneously, stacking their VRAM use. Given the sizes above (even
+qwythos-9b + gemma-3-12b alone is ~11GB, over budget), running this
+full 5-model setup for real on 8GB will likely hit an out-of-memory
+error once more than one non-primary local model gets warmed up in the
+same server process -- this is NOT solved by picking smaller quants
+alone. Worth treating as a real next step (e.g. unload an idle local
+model after N seconds, or cap how many non-primary models can be
+resident at once) rather than something to discover the hard way.
 
 ## Next steps (once the desktop is set up)
 

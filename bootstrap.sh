@@ -46,24 +46,24 @@ echo "config/models.yaml currently expects 5 local models. Each of these"
 echo "is an interactive search -- you pick the exact repo and"
 echo "quantization yourself, since auto-picking the first search result"
 echo "risks silently grabbing the wrong file. Confirmed exact sources"
-echo "(see README's \"Confirmed model sources\" section for quant notes,"
-echo "especially the two -- qwythos-9b and gpt-oss-20b -- that do NOT"
-echo "have a Q4_K_M and need a specific smaller quant picked instead"
-echo "on an 8GB card):"
+echo "and real (checked, not estimated) file sizes -- see README's"
+echo "\"Confirmed model sources\" section for the full picture, including"
+echo "a real gap: local models never get unloaded once warmed up, so"
+echo "running several at once on 8GB WILL likely OOM regardless of quant:"
 echo
 echo "  source venv/bin/activate"
-echo '  python main.py models --hf "Huihui-Qwythos-9B-Claude-Mythos-5-1M-abliterated-GGUF"  # -> qwythos-9b (primary) -- pick Q6_K, tightest fit on 8GB'
-echo '  python main.py models --hf "OpenAi-GPT-oss-20b-abliterated-uncensored-NEO-Imatrix-gguf"  # -> gpt-oss-20b -- pick IQ4_NL'
-echo '  python main.py models --hf "gemma-3-12b-it-abliterated"     # -> gemma-3-12b -- compare mlabonne vs huihui-ai sources'
+echo '  python main.py models --hf "Huihui-Qwythos-9B-Claude-Mythos-5-1M-abliterated-GGUF"  # -> qwythos-9b (primary) -- pick Q4_K, 5.38GB'
+echo '  python main.py models --hf "OpenAi-GPT-oss-20b-abliterated-uncensored-NEO-Imatrix-gguf"  # -> gpt-oss-20b --'
+echo '                                                                  # smallest quant here (IQ4_NL) is 11.78GB,'
+echo '                                                                  # does NOT fit 8GB VRAM at all, needs CPU offload'
+echo '  python main.py models --hf "mlabonne/gemma-3-12b-it-abliterated-GGUF"  # -> gemma-3-12b -- pick q3_k_m, 5.60GB'
 echo '  python main.py models --hf "Huihui-Qwen3-Coder-30B-A3B-Instruct-abliterated-GGUF"  # -> qwen3-coder --'
 echo '                                                                  # mradermacher'"'"'s GGUF/i1-GGUF repo;'
 echo '                                                                  # MUCH bigger than the other 4 (~16GB+'
 echo '                                                                  # even at the smallest 4-bit quant) --'
 echo '                                                                  # needs heavy CPU/RAM offload on 8GB'
-echo '  python main.py models --hf "DeepSeek-R1-Distill-Qwen-7B-abliterated"  # -> deepseek-r1-distill-8b -- no exact'
-echo '                                                                  # "Qwen-8B" distill exists; this 7B one or'
-echo '                                                                  # DeepSeek-R1-0528-Qwen3-8B-abliterated are'
-echo '                                                                  # the closest real options, your call'
+echo '  python main.py models --hf "DeepSeek-R1-Distill-Qwen-7B-abliterated"  # -> deepseek-r1-distill-8b -- pick'
+echo '                                                                  # mradermacher'"'"'s GGUF, Q4_K_M, 4.36GB'
 echo
 echo "After each download, update the matching model_path placeholder"
 echo "in config/models.yaml if it didn't register under the exact name"
