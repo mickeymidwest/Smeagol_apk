@@ -45,14 +45,21 @@ echo
 echo "config/models.yaml currently expects 5 local models. Each of these"
 echo "is an interactive search -- you pick the exact repo and"
 echo "quantization yourself, since auto-picking the first search result"
-echo "risks silently grabbing the wrong file:"
+echo "risks silently grabbing the wrong file. Confirmed exact sources"
+echo "(see README's \"Confirmed model sources\" section for quant notes,"
+echo "especially the two -- qwythos-9b and gpt-oss-20b -- that do NOT"
+echo "have a Q4_K_M and need a specific smaller quant picked instead"
+echo "on an 8GB card):"
 echo
 echo "  source venv/bin/activate"
-echo '  python main.py models --hf "Qwythos-9B Claude Mythos"       # -> qwythos-9b (primary)'
-echo '  python main.py models --hf "gpt-oss-20b abliterated"        # -> gpt-oss-20b'
-echo '  python main.py models --hf "gemma 3 12b abliterated"        # -> gemma-3-12b'
+echo '  python main.py models --hf "Huihui-Qwythos-9B-Claude-Mythos-5-1M-abliterated-GGUF"  # -> qwythos-9b (primary) -- pick Q6_K, tightest fit on 8GB'
+echo '  python main.py models --hf "OpenAi-GPT-oss-20b-abliterated-uncensored-NEO-Imatrix-gguf"  # -> gpt-oss-20b -- pick IQ4_NL'
+echo '  python main.py models --hf "gemma-3-12b-it-abliterated"     # -> gemma-3-12b -- compare mlabonne vs huihui-ai sources'
 echo '  python main.py models --hf "Qwen3 Coder abliterated"        # -> qwen3-coder'
-echo '  python main.py models --hf "DeepSeek R1 Distill Qwen 8B abliterated"  # -> deepseek-r1-distill-8b'
+echo '  python main.py models --hf "DeepSeek-R1-Distill-Qwen-7B-abliterated"  # -> deepseek-r1-distill-8b -- no exact'
+echo '                                                                  # "Qwen-8B" distill exists; this 7B one or'
+echo '                                                                  # DeepSeek-R1-0528-Qwen3-8B-abliterated are'
+echo '                                                                  # the closest real options, your call'
 echo
 echo "After each download, update the matching model_path placeholder"
 echo "in config/models.yaml if it didn't register under the exact name"

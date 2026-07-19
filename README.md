@@ -183,6 +183,60 @@ scan specifically (not just the new Hugging Face path) actually
 completes and registers a model end to end, since that's the feature
 that was silently broken.
 
+## Confirmed model sources (2026-07-19, desktop setup pending)
+
+Exact repos confirmed for the 5 local models, so `models --hf` searches
+land on the right one instead of guessing from a vague search term.
+Quant notes matter here -- two of these don't have a Q4_K_M, which the
+rest of this README/config's comments assume by default:
+
+- **qwythos-9b** (primary): `huihui-ai/Huihui-Qwythos-9B-Claude-Mythos-5-1M-abliterated-GGUF`
+  -- available quants are Q6_K (7.56GB), Q8_0 (9.79GB), BF16. **No
+  Q4_K_M.** On an 8GB card, Q6_K is the only one that could fit at
+  all, and it's tight -- barely any headroom left for context or
+  anything else using the GPU. Worth double-checking the actual files
+  list on the repo page for a smaller quant before committing to Q6_K.
+- **gpt-oss-20b**: `DavidAU/OpenAi-GPT-oss-20b-abliterated-uncensored-NEO-Imatrix-gguf`
+  -- available quants are IQ4_NL, Q5_1, Q8_0. **No Q4_K_M** either --
+  IQ4_NL is the realistic pick for 8GB. MoE architecture offloads more
+  gracefully than a dense 20B would (per the existing model_scan.py
+  comment), so this one's more forgiving than the raw size suggests.
+- **gemma-3-12b**: two abliterated sources to compare --
+  `mlabonne/gemma-3-12b-it-abliterated` and
+  `huihui-ai/gemma-3-12b-it-abliterated`. Didn't check quant
+  availability on either yet -- do that alongside picking one.
+- **qwen3-coder**: not yet re-confirmed with an exact repo -- the
+  original `models --hf "Qwen3 Coder abliterated"` search term still
+  applies as-is.
+- **deepseek-r1-distill-8b**: no exact "Qwen-8B" distill actually
+  exists upstream. The two real closest options are
+  `huihui-ai/DeepSeek-R1-Distill-Qwen-7B-abliterated` and
+  `huihui-ai/DeepSeek-R1-0528-Qwen3-8B-abliterated` -- pick whichever
+  when you're actually at the search prompt, this needs a real look at
+  both rather than a guess made here.
+
+## Next steps (once the desktop is set up)
+
+1. Run `install-all.sh` (or `bootstrap.sh` + the manual snapshot/KDE
+   steps, if you'd rather do those separately) to get the base install,
+   BTRFS snapshots, and headless KDE config all in one pass.
+2. Download the 5 models above via `gremlin models --hf "<exact repo
+   name>"`, picking the quant noted for each.
+3. `gremlin set-sudo-password` and `gremlin list-snapshots` -- confirm
+   both work for real before ever relying on `/rollback` remotely (see
+   "Root commands and rolling back" above -- neither has been tested
+   against real `sudo`/`snapper` yet, only the clean-failure paths in a
+   sandbox with neither available).
+4. Chat with Gremlin normally for a while to build up
+   `data/learning_log.jsonl`, then `gremlin build-training-set` to see
+   how much real distillation material exists.
+5. From there: steps 3-6 of the fine-tuning plan (QLoRA training on
+   Qwythos-9B, GGUF conversion, the eval gate, checkpoint promotion) --
+   needs `torch`/`transformers`/`peft`/`bitsandbytes` (not yet added to
+   this repo) and a local llama.cpp checkout for GGUF conversion, on
+   top of the base install. Ask to pick this up and it'll pick up
+   exactly where the plan left off.
+
 ## Removing models
 
 ```bash
