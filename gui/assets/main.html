@@ -247,7 +247,34 @@ async function handleSlashCommand(message) {
     return;
   }
 
-  addTurn('system', `Unknown command: ${cmd}\nAvailable: /snapshots, /rollback <number>, /root <command>`, null, true);
+  if (cmd === '/edit') {
+    const rest = message.slice('/edit'.length).trim();
+    const confirmed = rest.endsWith(' confirm');
+    const goal = (confirmed ? rest.slice(0, -' confirm'.length) : rest).trim();
+    if (!goal) {
+      addTurn('system', 'Usage: /edit <what to change>  (then /edit <what to change> confirm to actually apply it)', null, true);
+      return;
+    }
+    if (!confirmed) {
+      addTurn('system', `This asks Gremlin to propose a code change for itself, reviewed by claude+gemini, and commits it to git if both approve. Type "/edit ${goal} confirm" to proceed.`);
+      return;
+    }
+    thinkingEl.style.display = 'block';
+    try {
+      const r = await window.pywebview.api.self_edit(goal, true);
+      const body = r.applied
+        ? (r.committed ? `Applied and committed: ${r.commit_message}\nFiles changed: ${r.files_changed}` : `Applied but NOT committed -- ${r.warning}`)
+        : `NOT applied -- ${r.reason}`;
+      addTurn('system', body, null, !r.applied);
+    } catch (e) {
+      addTurn('system', "Couldn't reach Gremlin: " + e, null, true);
+    } finally {
+      thinkingEl.style.display = 'none';
+    }
+    return;
+  }
+
+  addTurn('system', `Unknown command: ${cmd}\nAvailable: /snapshots, /rollback <number>, /root <command>, /edit <goal>`, null, true);
 }
 
 sendBtn.addEventListener('click', sendMessage);

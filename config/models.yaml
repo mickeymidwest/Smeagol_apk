@@ -3,15 +3,13 @@ models:
   # model_path to wherever `gremlin models --hf` actually put the file
   # once you've downloaded it (exact filename depends on which
   # quantization you pick -- Q4_K_M recommended for an 8GB card).
-  - name: qwythos-9b
+  - name: llama-3.1-8b-abliterated
     type: local_gguf
-    display_name: "Qwythos-9B (Claude Mythos style)"
-    model_path: "models/Qwythos-9B-Claude-Mythos-5-1M-Q4_K_M.gguf"   # <-- update this
+    display_name: "Llama-3.1-8B (abliterated)"
+    model_path: "/home/mickey/Downloads/gremlin/models/meta-llama-3.1-8b-instruct-abliterated.Q4_K_M.gguf"
     n_ctx: 4096
     n_gpu_layers: -1
-    chat_format: chatml   # this model ships its own embedded chat template --
-                          # if formatting looks off, try removing this line
-                          # entirely rather than forcing chatml
+    chat_format: llama-3
 
   # The 4 curated consult models -- update each model_path once downloaded.
   # Only contacted when gremlin's own answer looks uncertain, never on
@@ -22,37 +20,45 @@ models:
 
   - name: gpt-oss-20b
     type: local_gguf
-    display_name: "gpt-oss-20b (abliterated) -- closest to ChatGPT"
-    model_path: "models/gpt-oss-20b-abliterated.Q4_K_M.gguf"   # <-- update this
+    # Swapped for dolphin-2.9-llama3-8b -- gpt-oss-20b's smallest GGUF
+    # quant is 11.8GB, too big for an 8GB card even alone. Dolphin is
+    # the official Cognitive Computations "uncensored" 8B, same llama-3
+    # chat template as the primary model.
+    display_name: "Dolphin 2.9 Llama3 8B (uncensored) -- general/closest to ChatGPT"
+    model_path: "/home/mickey/Downloads/gremlin/models/dolphin-2.9-llama3-8b-q4_K_M.gguf"
     n_ctx: 4096
-    n_gpu_layers: -1   # MoE architecture offloads more gracefully than a dense
-                       # 20B would -- may still spill some layers to CPU on 8GB
-    chat_format: chatml
+    n_gpu_layers: 10
+    chat_format: llama-3
 
   - name: gemma-3-12b
     type: local_gguf
-    display_name: "Gemma 3 12B (abliterated) -- closest to Gemini"
-    model_path: "models/gemma-3-12b-abliterated.Q4_K_M.gguf"   # <-- update this
+    # Swapped for gemma-2-9b-it-abliterated -- gemma-3-12b's smallest
+    # usable quant (7.3GB) left too little VRAM headroom alongside the
+    # primary model.
+    display_name: "Gemma 2 9B (abliterated) -- closest to Gemini"
+    model_path: "/home/mickey/Downloads/gremlin/models/gemma-2-9b-it-abliterated-Q4_K_M.gguf"
     n_ctx: 4096
-    n_gpu_layers: -1
-    chat_format: chatml   # verify against llama-cpp-python's supported preset
-                          # names -- may need a Gemma-specific format instead
+    n_gpu_layers: 10
+    chat_format: gemma
 
   - name: qwen3-coder
     type: local_gguf
-    display_name: "Qwen3-Coder (abliterated) -- best for code"
-    model_path: "models/qwen3-coder-abliterated.Q4_K_M.gguf"   # <-- update this
+    # Swapped for Qwen2.5-Coder-7B-Instruct-abliterated -- no abliterated
+    # Qwen3-Coder GGUF at a reasonable size was available; 2.5-Coder-7B
+    # is the well-established, reputably-quantized equivalent.
+    display_name: "Qwen2.5-Coder 7B (abliterated) -- best for code"
+    model_path: "/home/mickey/Downloads/gremlin/models/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf"
     n_ctx: 4096
-    n_gpu_layers: -1
-    chat_format: chatml
+    n_gpu_layers: 10
+    chat_format: qwen
 
   - name: deepseek-r1-distill-8b
     type: local_gguf
     display_name: "DeepSeek-R1-Distill-Qwen-8B (abliterated) -- deep reasoning/math"
-    model_path: "models/deepseek-r1-distill-8b-abliterated.Q4_K_M.gguf"   # <-- update this
+    model_path: "/home/mickey/Downloads/gremlin/models/DeepSeek-R1-Distill-Qwen-8B-Abliterated.i1-Q4_K_M.gguf"
     n_ctx: 4096
-    n_gpu_layers: -1
-    chat_format: chatml
+    n_gpu_layers: 10
+    chat_format: qwen
 
   # Claude and Gemini -- kept as fallback/last-resort, not as consult
   # group members. The 4 local models above are what Gremlin actually
@@ -99,7 +105,7 @@ models:
 persona:
   name: gremlin
   display_name: "Gremlin"
-  primary_model: qwythos-9b
+  primary_model: llama-3.1-8b-abliterated
   fallback_models: [claude, gemini]
   # The 4 curated consult models -- gpt-oss for general reasoning,
   # gemma for Gemini-flavored general+multilingual, qwen3-coder for
@@ -115,4 +121,14 @@ persona:
   # flavor layered on top. If you want one, write it as multi-line text
   # (system_prompt: | followed by indented lines) -- it's applied in
   # exactly the two places described above, nowhere else.
-  system_prompt: ""
+  system_prompt: |
+    Your name is Gremlin. You're a personal AI assistant running locally
+    on the user's own desktop. If asked your name or who you are, answer
+    as Gremlin.
+
+    Never say things like "as an AI", "as a language model", "I'm just an
+    AI", "I don't have personal experiences/feelings", or any other
+    disclaimer about what you are, unless the user directly and
+    specifically asks whether you're an AI. Don't bring it up unprompted,
+    don't hedge answers with it, and don't repeat it turn after turn --
+    answer plainly as Gremlin, the way a person would.

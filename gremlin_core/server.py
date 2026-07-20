@@ -38,6 +38,7 @@ from . import eviction
 from . import model_scan
 from . import mutation_log
 from . import root_exec
+from . import self_improve
 from . import snapshots as snapshots_mod
 from .sandbox import SecureExecutionSandbox
 from .status import get_status_data
@@ -292,6 +293,53 @@ def create_app(
         if not ok:
             return jsonify({"ok": False, "error": err}), 400
         return jsonify({"ok": True})
+
+    @app.route("/admin/self-edit", methods=["POST"])
+    def admin_self_edit():
+        """The "tell it in the app and it actually edits its own code"
+        path -- admin-gated (same tier as /admin/execute and
+        /admin/rollback) because this is the one action that rewrites
+        Gremlin's own source. Underneath, it's the exact same
+        propose -> two-reviewer gate -> compile-checked apply pipeline
+        as the `gremlin improve`/`auto-fix` CLI commands (see
+        self_improve.run_self_edit) -- nothing here skips that gate,
+        it's just a friendlier front door onto it. Deliberately NOT
+        reachable from the regular /chat route: consult.py's docstring
+        explains why an ordinary message should never be able to trigger
+        a self-edit on its own."""
+        auth_error = _check_admin_auth()
+        if auth_error:
+            return auth_error
+
+        body = request.get_json(silent=True) or {}
+        goal = body.get("goal", "").strip()
+        if not goal:
+            return jsonify({"error": "'goal' is required"}), 400
+
+        run_tests = bool(body.get("run_tests", True))
+        allow_consult_override = bool(body.get("allow_consult_override", False))
+
+        model_names = [n for n in registry.names() if registry.get(n).info.kind != "persona"]
+        result = run_coro(
+            loop,
+            self_improve.run_self_edit(
+                router, str(project_root), goal, model_names,
+                reviewer_a="claude", reviewer_b="gemini", run_tests=run_tests,
+                allow_consult_override=allow_consult_override,
+                consult_models=registry.consult_models(),
+            ),
+            timeout=900.0,
+        )
+
+        mutation_log.append_mutation(str(project_root), {
+            "kind": "self_edit",
+            "goal": goal,
+            "applied": result.get("applied", False),
+            "committed": result.get("committed", False),
+            "files_changed": result.get("files_changed", []),
+        })
+
+        return jsonify(result)
 
     @app.route("/admin/reboot", methods=["POST"])
     def admin_reboot():

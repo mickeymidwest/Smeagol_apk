@@ -6,6 +6,7 @@ data/*.jsonl
 data/*.txt
 data/.gremlin.lock
 data/talking.marker
+data/.sudo_credential
 *.gremlin-backup-*
 
 # Downloaded model weights -- large binaries, not source, and can
@@ -23,3 +24,8 @@ venv/
 # same as the desktop side's own venv/__pycache__ exclusions above.
 android/.gradle/
 android/**/build/
+
+# llama.cpp checkout -- only used for its convert_hf_to_gguf.py +
+# quantize tooling when finetune.py promotes a new fine-tuned GGUF,
+# not project source. Re-clonable, not something to track.
+tools/llama.cpp/

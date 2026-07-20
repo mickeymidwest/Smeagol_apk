@@ -329,6 +329,52 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
         }
     }
 
+    /** Backs the `/edit <goal> confirm` slash command -- the "just tell
+     * it in the app" path onto self_improve.run_self_edit on the
+     * desktop: propose a patch, run it through the two-reviewer gate
+     * (claude + gemini), and only apply if both approve (compile-checked,
+     * auto-reverted on failure, committed to git if it lands). Same
+     * admin-token gate as every other slash command here, since this is
+     * the one that actually rewrites Gremlin's own source. Long read
+     * timeout on purpose -- propose + review + apply is several
+     * sequential model calls, not a quick call. */
+    fun selfEdit(goal: String, runTests: Boolean): AdminResult {
+        val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
+        return try {
+            val url = URL("http://$host:$port/admin/self-edit")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Admin-Token", adminToken)
+            connection.doOutput = true
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 600_000
+
+            val body = JSONObject().apply { put("goal", goal); put("run_tests", runTests) }
+            OutputStreamWriter(connection.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val json = JSONObject(stream.bufferedReader().use { it.readText() })
+
+            if (responseCode !in 200..299) {
+                AdminResult(false, json.optString("error", "HTTP $responseCode"))
+            } else {
+                val applied = json.optBoolean("applied")
+                val committed = json.optBoolean("committed")
+                val text = when {
+                    applied && committed -> "Applied and committed: ${json.optString("commit_message")}\n" +
+                        "Files changed: ${json.optJSONArray("files_changed")}"
+                    applied -> "Applied but NOT committed -- ${json.optString("warning")}"
+                    else -> "NOT applied -- ${json.optString("reason")}"
+                }
+                AdminResult(applied, text)
+            }
+        } catch (e: Exception) {
+            AdminResult(false, "Couldn't reach desktop: ${e.message}")
+        }
+    }
+
     private fun adminCreds(): Triple<String, Int, String>? {
         val host = prefs.getString("host", null)
         val port = prefs.getInt("port", 0)

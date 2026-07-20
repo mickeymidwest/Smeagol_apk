@@ -36,6 +36,11 @@ Usage (after `chmod +x gremlin` and putting it on your PATH):
   gremlin build-training-set      -- turn data/learning_log.jsonl (every time a consult
     was needed) into data/training_set.jsonl + data/eval_set.jsonl, for fine-tuning
     Gremlin's own primary model on what the consult group has contributed over time.
+  gremlin finetune [--promote]    -- runs build-training-set, then a QLoRA fine-tune of
+    the primary model's base repo on the result, merges + converts back to GGUF. Without
+    --promote the new .gguf is left on disk untouched; with it, persona.primary_model in
+    config/models.yaml is switched to the new version (the old model entry/file are left
+    alone either way, so reverting is a one-line config edit).
 
 Or directly: python main.py <command> ...
 """
@@ -48,7 +53,6 @@ from gremlin_core.registry import ModelRegistry
 from gremlin_core.router import Router
 from gremlin_core import self_improve
 from gremlin_core import consult
-from gremlin_core import review
 from gremlin_core import model_scan
 from gremlin_core import script_edit
 from gremlin_core import server
@@ -335,6 +339,39 @@ def cmd_build_training_set():
         )
 
 
+def cmd_finetune(promote: bool):
+    print("Building training set from data/learning_log.jsonl...")
+    try:
+        result = finetune.run_pipeline(PROJECT_ROOT, CONFIG_PATH, promote=promote)
+    except Exception as e:
+        print(f"Fine-tune failed: {e}")
+        return
+
+    if result["stage"] == "dataset":
+        print(f"Wrote {result['train_count']} training example(s) -- nothing to train on yet.")
+        print(
+            "These come from data/learning_log.jsonl, which only gets an entry each time "
+            "Gremlin's own answer was uncertain and a consult was needed. Chat with Gremlin "
+            "a bit more first, then try again."
+        )
+        return
+
+    print(f"Trained on {result['train_count']} example(s), held out {result['eval_count']} for eval.")
+    loss_line = f"Train loss: {result['train_loss']:.4f}"
+    if result["eval_loss"] is not None:
+        loss_line += f", eval loss: {result['eval_loss']:.4f}"
+    print(loss_line)
+    print(f"Merged + quantized GGUF: {result['gguf_path']}")
+    if result["promoted_name"]:
+        print(f"Promoted as '{result['promoted_name']}' -- persona.primary_model now points to it.")
+        print("Run `gremlin list` to confirm, or edit config/models.yaml's primary_model to revert.")
+    else:
+        print(
+            "Not promoted -- the new GGUF is on disk but gremlin's primary_model is untouched. "
+            "Re-run with --promote once you've sanity-checked it, or register/point to it manually."
+        )
+
+
 async def cmd_list(registry: ModelRegistry):
     print("Registered models:")
     for name in registry.names():
@@ -418,70 +455,28 @@ async def cmd_improve(
         print("\n(dry run -- rerun with --apply to actually apply this patch)")
         return
 
-    try:
-        with git_mutation_lock(PROJECT_ROOT):
-            print(f"\n=== Review gate: {reviewer_a} then {reviewer_b} must both approve ===")
-            fixer = model_names[0]
-            outcome = await review.review_and_revise(
-                router, patch, goal, reviewer_a=reviewer_a, reviewer_b=reviewer_b, fixer=fixer
-            )
+    print(f"\n=== Review gate: {reviewer_a} then {reviewer_b} must both approve ===")
+    result = await self_improve.run_self_edit(
+        router, PROJECT_ROOT, goal, model_names,
+        reviewer_a=reviewer_a, reviewer_b=reviewer_b, run_tests=run_tests,
+        allow_consult_override=allow_consult_override, consult_models=consult_models,
+        teach_on_failure=teach_on_failure, teacher_model=teacher_model,
+        patch=patch,
+    )
 
-            for r in outcome.history:
-                verdict = "APPROVED" if r.approved else "REQUESTED CHANGES"
-                print(f"  [{r.reviewer}] {verdict}" + (f" -- {r.feedback}" if r.feedback else ""))
+    for r in result.get("review_history", []):
+        verdict = "APPROVED" if r["approved"] else "REQUESTED CHANGES"
+        print(f"  [{r['reviewer']}] {verdict}" + (f" -- {r['feedback']}" if r["feedback"] else ""))
 
-            applied_by = f"{','.join(model_names)} (reviewed by {reviewer_a},{reviewer_b})"
-
-            if not outcome.approved:
-                if not allow_consult_override:
-                    print(f"\nNOT applied -- {outcome.reason}")
-                    print("Gremlin is only allowed to edit its own code once both reviewers approve the same patch.")
-                    print("(rerun with --allow-consult-override to permit the 4-model consensus path instead)")
-                    return
-
-                print(f"\n{reviewer_a}/{reviewer_b} gate not satisfied -- {outcome.reason}")
-                if not consult_models:
-                    print("NOT applied -- --allow-consult-override was set, but no consult models are configured "
-                          "(config/models.yaml persona.consult_models).")
-                    return
-
-                print(f"=== Override check: all of {', '.join(consult_models)} must approve ===")
-                override_outcome = await review.consult_consensus_check(
-                    router, outcome.patch, goal, consult_models
-                )
-                for r in override_outcome.history:
-                    verdict = "APPROVED" if r.approved else "REQUESTED CHANGES"
-                    print(f"  [{r.reviewer}] {verdict}" + (f" -- {r.feedback}" if r.feedback else ""))
-
-                if not override_outcome.approved:
-                    print(f"\nNOT applied -- {override_outcome.reason}")
-                    print(f"Neither the {reviewer_a}/{reviewer_b} gate nor unanimous consult-model consensus was reached.")
-                    return
-
-                print(f"\nAll {len(consult_models)} consult models approved -- applying via override "
-                      f"(without {reviewer_a}/{reviewer_b} approval)...")
-                outcome = override_outcome
-                applied_by = f"{','.join(model_names)} (consult-consensus override: {','.join(consult_models)}, " \
-                             f"without {reviewer_a}/{reviewer_b} approval)"
-            else:
-                print(f"\nBoth reviewers approved after {outcome.rounds_used} round(s). Applying...")
-
-            result = await self_improve.apply_patch(
-                outcome.patch, PROJECT_ROOT, goal, applied_by=applied_by,
-                run_tests=run_tests,
-                router=router, teach_on_failure=teach_on_failure, teacher_model=teacher_model,
-            )
-            print("\n=== Result ===")
-            if result["applied"] and result.get("committed"):
-                print(f"Applied and committed: {result['commit_message']}")
-                print(f"Files changed: {result['files_changed']}")
-            elif result["applied"]:
-                print(f"Applied but NOT committed -- {result.get('warning')}")
-                print(f"Files changed: {result['files_changed']}")
-            else:
-                print(f"NOT applied: {result['reason']}")
-    except AlreadyRunning as e:
-        print(f"\nNot starting -- {e}")
+    print("\n=== Result ===")
+    if result["applied"] and result.get("committed"):
+        print(f"Applied and committed: {result['commit_message']}")
+        print(f"Files changed: {result['files_changed']}")
+    elif result["applied"]:
+        print(f"Applied but NOT committed -- {result.get('warning')}")
+        print(f"Files changed: {result['files_changed']}")
+    else:
+        print(f"NOT applied: {result['reason']}")
 
 
 async def cmd_auto_fix(registry: ModelRegistry, router: Router):
@@ -626,6 +621,11 @@ async def main():
 
     if cmd == "build-training-set":
         cmd_build_training_set()
+        return
+
+    if cmd == "finetune":
+        promote = "--promote" in sys.argv[2:]
+        cmd_finetune(promote)
         return
 
     registry = ModelRegistry.from_yaml(CONFIG_PATH)

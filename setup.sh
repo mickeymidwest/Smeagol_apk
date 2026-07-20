@@ -35,15 +35,29 @@ echo "[*] Checking for an NVIDIA GPU..."
 INSTALLED_LLAMA=false
 
 if command -v nvidia-smi &> /dev/null; then
-    CUDA_VERSION=$(nvidia-smi 2>/dev/null | grep -oP "CUDA Version: \K[0-9]+\.[0-9]+" | head -1)
+    # Older drivers print "CUDA Version: X.Y"; newer open-kernel-module
+    # drivers (e.g. 610.x) print "CUDA UMD Version: X.Y" instead -- match
+    # either so this doesn't silently fall through to CPU-only.
+    CUDA_VERSION=$(nvidia-smi 2>/dev/null | grep -oP "CUDA (UMD )?Version: \K[0-9]+\.[0-9]+" | head -1)
     if [ -n "$CUDA_VERSION" ]; then
         CUDA_TAG="cu$(echo "$CUDA_VERSION" | tr -d '.')"
         echo "[+] NVIDIA GPU detected (driver reports CUDA $CUDA_VERSION) -- trying GPU wheel: $CUDA_TAG"
         if pip install llama-cpp-python --extra-index-url "https://abetlen.github.io/llama-cpp-python/whl/$CUDA_TAG" --force-reinstall -q 2>/dev/null; then
             echo "[+] GPU-accelerated llama-cpp-python installed ($CUDA_TAG)"
             INSTALLED_LLAMA=true
+        elif command -v nvcc &> /dev/null; then
+            # No prebuilt wheel for this CUDA version yet (common right
+            # after a new CUDA release) -- build against the local toolkit
+            # instead of giving up and going CPU-only.
+            echo "[!] No matching prebuilt wheel for $CUDA_TAG -- building from source against local CUDA toolkit instead"
+            if CMAKE_ARGS="-DGGML_CUDA=on" pip install --force-reinstall --no-cache-dir llama-cpp-python -q; then
+                echo "[+] GPU-accelerated llama-cpp-python built and installed (source, CUDA $CUDA_VERSION)"
+                INSTALLED_LLAMA=true
+            else
+                echo "[!] Source build failed -- falling back to CPU-only"
+            fi
         else
-            echo "[!] No matching prebuilt wheel for $CUDA_TAG -- falling back to CPU-only"
+            echo "[!] No matching prebuilt wheel for $CUDA_TAG and no local nvcc to build against -- falling back to CPU-only"
         fi
     else
         echo "[!] nvidia-smi found but couldn't read a CUDA version from it -- falling back to CPU-only"

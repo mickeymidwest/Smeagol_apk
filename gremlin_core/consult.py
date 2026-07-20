@@ -156,6 +156,71 @@ def _confident_results(results: dict) -> dict:
     return {name: r for name, r in results.items() if r.ok and not seems_uncertain(r.text)}
 
 
+def _memory_file_path(root: str) -> str:
+    """A plain, human-editable text file living next to the project
+    (in ~/Downloads, one level up from the gremlin repo itself) rather
+    than inside data/ -- so it's easy for mickey to open directly in a
+    text editor, and so it's never touched by the git-based auto-update
+    timer. This is the actual fix for "memory doesn't last": the
+    learning log and away-sync log are both narrow, single-purpose logs
+    that only ever get read back in specific situations (exact-match
+    cache, away-mode replay); nothing before this gave Gremlin a place
+    to keep general facts across sessions."""
+    return os.path.join(os.path.dirname(root.rstrip(os.sep)), "gremlin_memory.txt")
+
+
+def _load_memory_notes(root: str, max_chars: int = 6000) -> str:
+    """Read back whatever's in the memory file, most recent lines first
+    trimmed to a bounded size -- this is meant to be durable notes fed
+    into every prompt as background, not an unbounded context dump."""
+    path = _memory_file_path(root)
+    if not os.path.exists(path):
+        return ""
+    with open(path, "r") as f:
+        text = f.read().strip()
+    if not text:
+        return ""
+    if len(text) > max_chars:
+        text = text[-max_chars:]
+    return "Things you (Gremlin) have been told to remember about the user, across all past sessions:\n" + text
+
+
+def remember_fact(root: str, text: str) -> None:
+    """Appends a durable, timestamped note to the memory file. Unlike
+    learning_log.jsonl (auto-populated from consults) or away_session_log
+    (auto-populated from away-mode), this is the one memory store the
+    user writes to directly, by telling Gremlin to remember something in
+    conversation -- see the "remember" trigger in consult_and_learn."""
+    path = _memory_file_path(root)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    stamp = time.strftime("%Y-%m-%d %H:%M")
+    if not os.path.exists(path):
+        header = (
+            "# Gremlin's memory\n"
+            "# Plain text, one note per line -- edit this file yourself any time,\n"
+            "# or just tell Gremlin \"remember ...\" in chat and it'll append here.\n"
+            "# Read back into context on every message, so nothing written here\n"
+            "# is forgotten between sessions.\n\n"
+        )
+        with open(path, "w") as f:
+            f.write(header)
+    with open(path, "a") as f:
+        f.write(f"- [{stamp}] {text}\n")
+
+
+REMEMBER_PREFIXES = ("remember that ", "remember: ", "remember ")
+
+
+def _extract_remember_command(prompt: str) -> Optional[str]:
+    stripped = prompt.strip()
+    lowered = stripped.lower()
+    for prefix in REMEMBER_PREFIXES:
+        if lowered.startswith(prefix):
+            fact = stripped[len(prefix):].strip()
+            return fact or None
+    return None
+
+
 def _recent_away_context(root: str, limit: int = 5) -> str:
     """This is the actual 'feed it back' piece: recent synced away-mode
     exchanges, handed to Gremlin as background so it can reference what
@@ -203,6 +268,9 @@ async def _consult_and_learn_inner(
     last_resort_model: Optional[str] = None,
 ) -> dict:
     """
+    0. If the message is a "remember ..." command, just write it to the
+       durable memory file and confirm -- no model call needed. Every
+       other prompt gets whatever's in that file folded into its context.
     1. Check if this exact question was already learned -- answer from
        memory with zero model calls if so.
     2. Otherwise ask the persona (gremlin) directly.
@@ -217,11 +285,23 @@ async def _consult_and_learn_inner(
        so the voice is always Gremlin's, never a raw forward of
        whichever model happened to answer.
     """
+    remember_text = _extract_remember_command(prompt)
+    if remember_text:
+        remember_fact(root, remember_text)
+        return {
+            "answer": f"Got it, I'll remember that: {remember_text}",
+            "consulted": False,
+            "from_memory": False,
+            "contributors": [],
+        }
+
     cached = load_learned_answer(root, prompt)
     if cached is not None:
         return {"answer": cached, "consulted": False, "from_memory": True, "contributors": []}
 
-    context_note = _recent_away_context(root) or None
+    context_note = "\n\n".join(
+        part for part in (_load_memory_notes(root), _recent_away_context(root)) if part
+    ) or None
 
     primary_result = await router.route(persona_name, prompt, system=context_note)
     if not primary_result.ok:

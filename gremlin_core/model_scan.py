@@ -194,6 +194,37 @@ def remove_model_and_clean_persona(config_path: str, name: str) -> tuple[bool, O
     return True, None
 
 
+def set_primary_model(config_path: str, name: str) -> tuple[bool, Optional[str]]:
+    """Switches persona.primary_model to `name` -- the deliberate, CLI-only
+    promotion step after finetune.py produces a new GGUF. Not reachable
+    through update_entry_field/EDITABLE_FIELDS above (those are the fields
+    safe for a remote hologram/model-edit call): this changes which model
+    gremlin *is*, not a display tweak, so it only ever happens from a
+    direct local invocation. Same backup/validate/rollback pattern as the
+    rest of this file -- restores the original file if the new primary
+    name isn't actually a registered model."""
+    from .registry import ModelRegistry
+
+    path = Path(config_path)
+    backup_text = path.read_text()
+
+    pattern = re.compile(r"^(  primary_model:\s*)(\S+)", re.MULTILINE)
+    match = pattern.search(backup_text)
+    if not match:
+        return False, "no persona.primary_model field found in config"
+
+    new_text = backup_text[:match.start()] + f"{match.group(1)}{name}" + backup_text[match.end():]
+    path.write_text(new_text)
+
+    try:
+        ModelRegistry.from_yaml(config_path)
+    except Exception as e:
+        path.write_text(backup_text)
+        return False, f"promotion would have broken the config, restored original: {e}"
+
+    return True, None
+
+
 def insert_entries(config_path: str, entries: list[str]) -> None:
     """Inserts new model blocks right before the `persona:` top-level key,
     or at the end of the file if there's no persona section. Never

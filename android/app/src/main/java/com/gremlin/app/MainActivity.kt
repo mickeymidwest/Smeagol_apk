@@ -327,6 +327,23 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            "/edit" -> {
+                val rest = message.removePrefix("/edit").trim()
+                val confirmed = rest.endsWith(" confirm")
+                val goal = (if (confirmed) rest.removeSuffix("confirm") else rest).trim()
+                if (goal.isEmpty()) {
+                    appendSystemTurn("Usage: /edit <what to change>  (then /edit <what to change> confirm to actually apply it)", true)
+                } else if (!confirmed) {
+                    appendSystemTurn(
+                        "This asks Gremlin to propose a code change for itself, reviewed by claude+gemini, " +
+                            "and commits it to git if both approve. Type \"/edit $goal confirm\" to proceed.",
+                        false,
+                    )
+                } else {
+                    runAdminSlash { gremlinClient.selfEdit(goal, runTests = true) }
+                }
+            }
+
             "/snapshots" -> runAdminSlash { gremlinClient.listSnapshots() }
 
             "/rollback" -> {
@@ -346,7 +363,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             else -> appendSystemTurn(
-                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /reboot, /snapshots, /rollback <number>",
+                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /edit <goal>, /reboot, /snapshots, /rollback <number>",
                 true,
             )
         }

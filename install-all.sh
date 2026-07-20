@@ -102,7 +102,7 @@ else
         echo "[*] snapper config for / already exists, skipping"
     fi
 
-    sudo systemctl enable --now grub-btrfs.path snapper-timeline.timer snapper-cleanup.timer
+    sudo systemctl enable --now grub-btrfsd.service snapper-timeline.timer snapper-cleanup.timer
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
     echo "[+] Snapshot rollback ready. Once a sudo password is cached (step 6"

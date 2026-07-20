@@ -32,6 +32,8 @@ from .router import Router
 from .sandbox import SecureExecutionSandbox
 from . import mutation_log
 from . import teacher
+from . import review as review_mod
+from .process_lock import git_mutation_lock, AlreadyRunning
 
 SELF_IMPROVE_SYSTEM_PROMPT = (
     "You are improving the source code of an AI orchestrator called Gremlin. "
@@ -257,3 +259,91 @@ async def apply_patch(
         return {"applied": True, "committed": True, "commit_message": commit_msg, "files_changed": changed}
     finally:
         os.unlink(patch_path)
+
+
+async def run_self_edit(
+    router: Router,
+    root: str,
+    goal: str,
+    model_names: list[str],
+    reviewer_a: str = "claude",
+    reviewer_b: str = "gemini",
+    run_tests: bool = True,
+    allow_consult_override: bool = False,
+    consult_models: Optional[list[str]] = None,
+    teach_on_failure: bool = False,
+    teacher_model: str = "claude",
+    patch: Optional[str] = None,
+) -> dict:
+    """Non-interactive version of main.py's cmd_improve -- same propose ->
+    two-reviewer gate -> apply pipeline, but returns a plain dict instead
+    of printing, so a caller that isn't a terminal (the /admin/self-edit
+    HTTP route) can drive it. This is the one function both the CLI
+    `improve`/`auto-fix` commands and the app's admin panel should call,
+    so there is exactly one place the review gate can be bypassed by
+    mistake, not two independently-maintained copies of it.
+
+    Still requires the admin token at the HTTP layer (see server.py) --
+    this only ever runs for a caller who already holds that, the same
+    trust tier as /admin/execute and /admin/rollback. The two-reviewer
+    approval (or explicit unanimous-consult-override opt-in) still
+    applies underneath regardless of who's asking. `patch` lets a caller
+    that already ran propose_patch itself (main.py's cmd_improve, so its
+    dry-run preview and the patch actually reviewed/applied are the same
+    proposal, not two separate model calls) skip proposing again here."""
+    try:
+        with git_mutation_lock(root):
+            if patch is None:
+                patch = await propose_patch(router, model_names, goal, root)
+
+            fixer = model_names[0]
+            outcome = await review_mod.review_and_revise(
+                router, patch, goal, reviewer_a=reviewer_a, reviewer_b=reviewer_b, fixer=fixer
+            )
+            review_history = [
+                {"reviewer": r.reviewer, "approved": r.approved, "feedback": r.feedback}
+                for r in outcome.history
+            ]
+            applied_by = f"{','.join(model_names)} (reviewed by {reviewer_a},{reviewer_b})"
+
+            if not outcome.approved:
+                if not (allow_consult_override and consult_models):
+                    return {
+                        "applied": False,
+                        "reason": outcome.reason,
+                        "patch": outcome.patch,
+                        "review_history": review_history,
+                    }
+
+                override_outcome = await review_mod.consult_consensus_check(
+                    router, outcome.patch, goal, consult_models
+                )
+                override_history = [
+                    {"reviewer": r.reviewer, "approved": r.approved, "feedback": r.feedback}
+                    for r in override_outcome.history
+                ]
+                if not override_outcome.approved:
+                    return {
+                        "applied": False,
+                        "reason": override_outcome.reason,
+                        "patch": override_outcome.patch,
+                        "review_history": review_history,
+                        "override_review_history": override_history,
+                    }
+
+                outcome = override_outcome
+                review_history += override_history
+                applied_by = (
+                    f"{','.join(model_names)} (consult-consensus override: "
+                    f"{','.join(consult_models)}, without {reviewer_a}/{reviewer_b} approval)"
+                )
+
+            result = await apply_patch(
+                outcome.patch, root, goal, applied_by=applied_by,
+                run_tests=run_tests, router=router,
+                teach_on_failure=teach_on_failure, teacher_model=teacher_model,
+            )
+            result["review_history"] = review_history
+            return result
+    except AlreadyRunning as e:
+        return {"applied": False, "reason": str(e)}

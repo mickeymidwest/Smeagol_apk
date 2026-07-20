@@ -218,6 +218,40 @@ class Api:
         ok, message = asyncio.run(snapshots_mod.rollback_to(number, str(PROJECT_ROOT)))
         return {"ok": ok, "message": message}
 
+    def self_edit(self, goal: str, run_tests: bool = True) -> dict:
+        """Backs main.html's `/edit <goal> confirm` slash command.
+        Unlike list_snapshots/rollback_to/run_as_root above, this can't
+        just call gremlin_core directly in-process: self_improve.run_self_edit
+        needs a real Router with the actual model backends loaded, and
+        building a second one here would double-load whatever's already
+        resident in `gremlin serve`'s registry, fighting it for the same
+        VRAM (see router.py's note on this exact problem). So this proxies
+        to that already-running server's /admin/self-edit instead, same
+        as chat() proxies to /chat -- one registry, one source of truth,
+        whether the request came from this window or the phone."""
+        base_url, token = self._ensure_server()
+        if not self._wait_for_server(base_url, token):
+            return {
+                "applied": False,
+                "reason": "Couldn't start gremlin serve -- check the terminal gui/app.py was launched from for errors.",
+            }
+
+        admin_token = server_mod.get_or_create_admin_token(DATA_DIR)
+        try:
+            r = requests.post(
+                f"{base_url}/admin/self-edit",
+                json={"goal": goal, "run_tests": run_tests},
+                headers={"X-Admin-Token": admin_token},
+                timeout=900,
+            )
+        except requests.RequestException as e:
+            return {"applied": False, "reason": f"Couldn't reach gremlin serve: {e}"}
+
+        if r.status_code != 200:
+            detail = (r.json().get("error") if r.headers.get("content-type", "").startswith("application/json") else None) or f"HTTP {r.status_code}"
+            return {"applied": False, "reason": detail}
+        return r.json()
+
     def run_as_root(self, command: str) -> dict:
         """Backs main.html's `/root <command>` slash command -- runs via
         root_exec.run_as_root, which uses the sudo password cached by
