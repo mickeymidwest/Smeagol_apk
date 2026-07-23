@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.gremlin.app.llama.LocalLlama
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -93,14 +94,11 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
         val port = prefs.getInt("port", 0)
         val token = prefs.getString("token", null)
 
-        // No network at all (e.g. airplane mode) -- don't waste time on
-        // a desktop attempt that can't possibly succeed, and don't
-        // bother trying direct API calls either, just say so plainly.
-        if (!hasAnyNetwork()) {
-            return ChatResult("No network connection right now.", "no-network")
-        }
-
-        if (host != null && port != 0 && token != null) {
+        // Network-gated only for the desktop attempt -- chatAway() below
+        // tries the offline on-device model *before* checking for network
+        // at all, since that's the one path meant to keep working with
+        // zero connectivity (airplane mode, a dead zone, etc.).
+        if (hasAnyNetwork() && host != null && port != 0 && token != null) {
             try {
                 val pending = readPendingSync()
                 val answer = postToDesktop(host, port, token, message, pending)
@@ -108,22 +106,50 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
                 refreshCachedPersonaVoice(host, port, token) // best-effort, keeps away-mode voice current
                 return ChatResult(answer, "desktop")
             } catch (e: Exception) {
-                // Desktop configured but unreachable -- fall through to direct API calls.
+                // Desktop configured but unreachable -- fall through to away-mode.
             }
         }
 
         val result = chatAway(message)
-        if (result.source == "claude" || result.source == "gemini") {
+        if (result.source == "claude" || result.source == "gemini" || result.source == "local") {
             appendPendingSync(message, result.answer, result.source)
         }
         return result
     }
 
     private fun chatAway(message: String): ChatResult {
+        val personaPrompt = prefs.getString("cached_persona_prompt", "") ?: ""
+
+        // Offline on-device model first -- it needs no network and no API
+        // key, so it's the only path that actually keeps "talking to
+        // Gremlin" working with zero connectivity. Only tried if the user
+        // downloaded+enabled it in Settings (see LocalModelManager); any
+        // failure here just falls through to the cloud providers below
+        // rather than surfacing a raw error for what's meant to be a
+        // best-effort offline fallback.
+        if (prefs.getBoolean("local_model_enabled", false)) {
+            val modelPath = prefs.getString("local_model_path", null)
+            if (!modelPath.isNullOrBlank() && (LocalLlama.isReady() || LocalLlama.loadModel(modelPath))) {
+                val reply = LocalLlama.generateReply(personaPrompt, message)
+                if (!reply.isNullOrBlank()) {
+                    return ChatResult(reply, "local")
+                }
+            }
+        }
+
+        if (!hasAnyNetwork()) {
+            return ChatResult(
+                if (prefs.getBoolean("local_model_enabled", false))
+                    "No network connection, and the offline model couldn't answer either."
+                else
+                    "No network connection right now. Enable the offline model in Settings to keep chatting without one.",
+                "no-network",
+            )
+        }
+
         val anthropicKey = prefs.getString("anthropic_key", null)
         val geminiKey = prefs.getString("gemini_key", null)
         val preferred = prefs.getString("away_preferred", "claude")
-        val personaPrompt = prefs.getString("cached_persona_prompt", "") ?: ""
 
         val order = if (preferred == "gemini") listOf("gemini", "claude") else listOf("claude", "gemini")
         val errors = mutableListOf<String>()
@@ -146,7 +172,7 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
         return if (anthropicKey.isNullOrBlank() && geminiKey.isNullOrBlank()) {
             ChatResult(
                 "Can't reach the desktop and no API keys are set up. " +
-                "Connect to your home Wi-Fi, or add a Claude/Gemini API key in Settings.",
+                "Connect to your home Wi-Fi, add a Claude/Gemini API key, or enable the offline model in Settings.",
                 "none-configured",
             )
         } else {

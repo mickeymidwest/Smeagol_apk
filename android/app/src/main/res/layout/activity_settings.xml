@@ -171,6 +171,69 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="Offline (fully local)"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="A small model (~910MB) that lives on this phone -- keeps Gremlin talking with zero network at all (no desktop, no Wi-Fi, no cell signal), no API key needed. Tried first, before Claude/Gemini above, whenever the desktop isn't reachable."
+            android:textSize="11sp"
+            android:alpha="0.7"
+            android:layout_marginBottom="10dp" />
+
+        <TextView
+            android:id="@+id/local_model_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:layout_marginBottom="8dp"
+            android:text="Not downloaded" />
+
+        <ProgressBar
+            android:id="@+id/local_model_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/local_model_download_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Download offline model"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
+            android:id="@+id/local_model_enabled_checkbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Enable offline model"
+            android:enabled="false"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/local_model_remove_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Remove offline model"
+            android:visibility="gone"
+            android:backgroundTint="#8B2020" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#22000000"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="Admin"
             android:textStyle="bold"
             android:textSize="13sp"

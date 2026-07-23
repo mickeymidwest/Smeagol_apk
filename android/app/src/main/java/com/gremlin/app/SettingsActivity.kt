@@ -1,15 +1,21 @@
 package com.gremlin.app
 
+import android.content.SharedPreferences
 import android.os.Bundle
+import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ProgressBar
 import android.widget.RadioGroup
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.gremlin.app.llama.LocalLlama
+import com.gremlin.app.llama.LocalModelManager
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -64,6 +70,8 @@ class SettingsActivity : AppCompatActivity() {
                 .apply()
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
         }
+
+        setUpLocalModelSection(prefs)
 
         if (host.isNotEmpty()) {
             loadStatus(host, port, token)
@@ -228,6 +236,86 @@ class SettingsActivity : AppCompatActivity() {
                 runOnUiThread { Toast.makeText(this, "Reboot request sent", Toast.LENGTH_LONG).show() }
             }
         }.start()
+    }
+
+    /** Offline on-device model: download into app-private storage, enable
+     * it as the first away-mode provider (see GremlinClient.chatAway()),
+     * or remove it to free the ~910MB back up. */
+    private fun setUpLocalModelSection(prefs: SharedPreferences) {
+        val statusText = findViewById<TextView>(R.id.local_model_status)
+        val progressBar = findViewById<ProgressBar>(R.id.local_model_progress)
+        val downloadButton = findViewById<Button>(R.id.local_model_download_button)
+        val enabledCheckbox = findViewById<CheckBox>(R.id.local_model_enabled_checkbox)
+        val removeButton = findViewById<Button>(R.id.local_model_remove_button)
+
+        fun refresh() {
+            val downloaded = LocalModelManager.isDownloaded(applicationContext)
+            if (downloaded) {
+                val sizeMb = LocalModelManager.modelFile(applicationContext).length() / (1024 * 1024)
+                statusText.text = "Downloaded (${sizeMb}MB)"
+                downloadButton.text = "Re-download offline model"
+                enabledCheckbox.isEnabled = true
+                removeButton.visibility = View.VISIBLE
+                // Keep the path pref in sync with reality even if it was
+                // somehow cleared without the file itself being removed.
+                prefs.edit().putString("local_model_path", LocalModelManager.modelFile(applicationContext).absolutePath).apply()
+            } else {
+                statusText.text = "Not downloaded (~910MB, one-time download)"
+                downloadButton.text = "Download offline model"
+                enabledCheckbox.isEnabled = false
+                removeButton.visibility = View.GONE
+            }
+            enabledCheckbox.isChecked = downloaded && prefs.getBoolean("local_model_enabled", false)
+        }
+        refresh()
+
+        downloadButton.setOnClickListener {
+            downloadButton.isEnabled = false
+            progressBar.visibility = View.VISIBLE
+            progressBar.progress = 0
+            statusText.text = "Downloading..."
+            Thread {
+                val ok = LocalModelManager.download(applicationContext) { downloaded, total ->
+                    runOnUiThread {
+                        if (total > 0) {
+                            progressBar.progress = ((downloaded * 100) / total).toInt()
+                            statusText.text = "Downloading... ${downloaded / (1024 * 1024)}MB / ${total / (1024 * 1024)}MB"
+                        }
+                    }
+                }
+                runOnUiThread {
+                    downloadButton.isEnabled = true
+                    progressBar.visibility = View.GONE
+                    Toast.makeText(
+                        this,
+                        if (ok) "Offline model downloaded" else "Download failed -- check connection and try again",
+                        if (ok) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
+                    ).show()
+                    refresh()
+                }
+            }.start()
+        }
+
+        enabledCheckbox.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean("local_model_enabled", checked).apply()
+            if (!checked) {
+                Thread { LocalLlama.unloadModel() }.start()
+            }
+        }
+
+        removeButton.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Remove offline model?")
+                .setMessage("Frees up ~910MB. You can download it again anytime.")
+                .setPositiveButton("Remove") { _, _ ->
+                    Thread {
+                        LocalModelManager.delete(applicationContext, prefs)
+                        runOnUiThread { refresh() }
+                    }.start()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     private fun setUpModelSpinner(spinner: Spinner, choicesArrayRes: Int, savedValue: String?) {

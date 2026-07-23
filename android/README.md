@@ -1,9 +1,33 @@
 # Gremlin (Android)
 
 Talks to a Gremlin desktop instance over your home Wi-Fi when it's
-reachable, and falls back to calling Claude or Gemini directly (using
-your own API keys, entered in Settings) when it's not. Same hologram
-widget as the desktop version.
+reachable, and falls back -- in order -- to a fully offline on-device
+model, then Claude, then Gemini (using your own API keys, entered in
+Settings) when it's not. Same hologram widget as the desktop version.
+
+## Offline on-device model
+
+Settings → "Offline (fully local)" downloads a small (~910MB,
+`mradermacher/Llama-3.2-1B-Instruct-abliterated-GGUF`, `Q4_K_M`) model
+straight to the phone and runs it with llama.cpp compiled from source
+via JNI (see `app/src/main/cpp/`). This is what actually keeps "talking
+to Gremlin" working with zero connectivity at all -- no desktop, no
+Wi-Fi, no cell signal, no API key. Once you get back in range of the
+desktop (or just get signal again), whatever was said in offline mode
+rides along with your next message and gets folded into the desktop's
+own `data/away_session_log.jsonl` the same way an away-mode Claude/Gemini
+exchange already does (see `gremlin_core/away_sync.py`) -- nothing new
+needed server-side, that sync path already existed.
+
+`android/llama.cpp` is a **git submodule** (pinned to release `b10091`),
+not vendored source -- llama.cpp has no published Maven artifact, only
+its own CMake project, so building it from source via
+`add_subdirectory()` is the actual supported way to embed it (same
+approach as llama.cpp's own `examples/llama.android` reference app,
+which `app/src/main/cpp/gremlin_llama.cpp` was adapted from). A fresh
+clone needs `git clone --recurse-submodules`, or `git submodule update
+--init` after a plain clone -- the CI workflow already does this
+(`submodules: recursive` in the checkout step).
 
 **This folder is part of the combined `gremlin` repo, not its own
 separate repo** -- see the root `README.md`'s "Putting this on GitHub"
@@ -56,3 +80,17 @@ first time this project gets an actual compile check from a real
 toolchain. If it fails, that's genuinely useful information -- paste me
 the exact error from the Actions log and I'll fix it against something
 real instead of guessing again.
+
+The native/JNI piece (`app/src/main/cpp/gremlin_llama.cpp`,
+`LocalLlama.kt`) carries the same caveat but more so -- it's adapted
+line-by-line from the real, working `ai_chat.cpp` in the pinned
+llama.cpp submodule (read directly off disk, not reconstructed from
+memory or a lossy web summary, specifically to avoid guessing at C API
+signatures that drift across llama.cpp versions), with
+`processUserPrompt()` + `generateNextToken()`'s per-token JNI loop
+collapsed into one blocking `generate()` call. The CMake/NDK wiring in
+`app/build.gradle.kts` and `app/src/main/cpp/CMakeLists.txt` is new
+territory for this project's CI (`android-build.yml` now installs NDK
+27 and checks out the submodule) and has never actually run yet as of
+this writing -- expect at least one round of real build errors on the
+first push, most likely in the CMake config rather than the C++ itself.
