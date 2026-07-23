@@ -92,7 +92,24 @@ class LlamaCppBackend(ModelBackend):
 
             loop = asyncio.get_event_loop()
 
-            async with self._lock:
+            # A blocking llama.cpp call already in flight (load or generate)
+            # can't actually be cancelled once it's running in its executor
+            # thread -- that's a hard limitation of the underlying C library,
+            # not something fixable here. So a caller that gave up waiting
+            # (e.g. an HTTP client timeout) leaves this lock held until that
+            # call naturally finishes. What we CAN do is stop a *second*
+            # request from silently hanging behind it for the same amount of
+            # time again -- fail fast with a clear "busy" error instead of
+            # queuing indefinitely.
+            try:
+                await asyncio.wait_for(self._lock.acquire(), timeout=5.0)
+            except asyncio.TimeoutError:
+                return GenerationResult(
+                    model=self.info.name, text="",
+                    error=f"{self.info.name} is still busy with a previous request -- try again shortly",
+                )
+
+            try:
                 await self._ensure_loaded()
 
                 def _run():
@@ -104,6 +121,8 @@ class LlamaCppBackend(ModelBackend):
 
                 result = await loop.run_in_executor(self._executor, _run)
                 self._last_used = time.monotonic()
+            finally:
+                self._lock.release()
 
             text = result["choices"][0]["message"]["content"]
             return GenerationResult(model=self.info.name, text=text)

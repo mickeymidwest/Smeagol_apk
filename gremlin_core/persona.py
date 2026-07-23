@@ -28,6 +28,7 @@ class PersonaBackend(ModelBackend):
         system_prompt: str = "",
         consult_model_names: Optional[list[str]] = None,
         last_resort_model_name: Optional[str] = None,
+        consult_sample_rate: float = 0.0,
     ):
         super().__init__(info)
         self.primary = primary
@@ -40,6 +41,12 @@ class PersonaBackend(ModelBackend):
         # with a confident answer -- a dedicated final check, not just
         # another name in the same list.
         self.last_resort_model_name = last_resort_model_name
+        # Fraction of otherwise-confident answers to consult anyway, purely
+        # to keep data flowing into learning_log.jsonl -- see consult.py's
+        # seems_uncertain(). An abliterated primary model rarely hedges in
+        # words even when it's wrong, so without this the finetune pipeline
+        # would never get real training data.
+        self.consult_sample_rate = consult_sample_rate
 
     def _combined_system(self, extra: Optional[str]) -> str:
         if self.system_prompt and extra:

@@ -92,6 +92,7 @@ class ModelRegistry:
                 system_prompt=persona_cfg.get("system_prompt", ""),
                 consult_model_names=persona_cfg.get("consult_models", []),
                 last_resort_model_name=last_resort_name,
+                consult_sample_rate=persona_cfg.get("consult_sample_rate", 0.0),
             )
 
         return reg

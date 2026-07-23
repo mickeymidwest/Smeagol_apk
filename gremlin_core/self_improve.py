@@ -111,7 +111,7 @@ async def apply_patch(
     test_timeout: int = 300,
     router: Optional[Router] = None,
     teach_on_failure: bool = False,
-    teacher_model: str = "claude",
+    teacher_model: str = "gemini",
 ) -> dict:
     """
     Validates and applies a unified diff against `root`, using git for
@@ -266,13 +266,13 @@ async def run_self_edit(
     root: str,
     goal: str,
     model_names: list[str],
-    reviewer_a: str = "claude",
-    reviewer_b: str = "gemini",
+    reviewer_a: str = "gemini",
+    reviewer_b: str = "deepseek-r1-distill-8b",
     run_tests: bool = True,
     allow_consult_override: bool = False,
     consult_models: Optional[list[str]] = None,
     teach_on_failure: bool = False,
-    teacher_model: str = "claude",
+    teacher_model: str = "gemini",
     patch: Optional[str] = None,
 ) -> dict:
     """Non-interactive version of main.py's cmd_improve -- same propose ->

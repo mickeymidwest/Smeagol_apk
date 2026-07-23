@@ -67,12 +67,15 @@ models:
   # a confident answer) -- a stronger check to fall back on, still
   # contributing to what gets learned and logged.
   #
-  # Claude -- set your key: export ANTHROPIC_API_KEY=sk-ant-...
-  - name: claude
-    type: anthropic
-    display_name: "Claude"
-    model_id: "claude-sonnet-5"
-    api_key_env: ANTHROPIC_API_KEY
+  # Claude -- disabled for now, .env still has the unfilled placeholder
+  # key (sk-ant-your-key-here). Re-enable by uncommenting this block and
+  # adding claude back to fallback_models/last_resort_model below once a
+  # real ANTHROPIC_API_KEY is set.
+  # - name: claude
+  #   type: anthropic
+  #   display_name: "Claude"
+  #   model_id: "claude-sonnet-5"
+  #   api_key_env: ANTHROPIC_API_KEY
 
   # Gemini -- set your key: export GEMINI_API_KEY=...
   - name: gemini
@@ -106,7 +109,7 @@ persona:
   name: gremlin
   display_name: "Gremlin"
   primary_model: llama-3.1-8b-abliterated
-  fallback_models: [claude, gemini]
+  fallback_models: [gemini]
   # The 4 curated consult models -- gpt-oss for general reasoning,
   # gemma for Gemini-flavored general+multilingual, qwen3-coder for
   # code, deepseek-r1-distill for deep reasoning/math and genuine lab
@@ -116,6 +119,16 @@ persona:
   # answer -- a dedicated final check, not just another name in the
   # list above.
   last_resort_model: gemini
+  # Since the abliterated primary rarely hedges in words even when it's
+  # wrong (see gremlin_core/consult.py's seems_uncertain), the keyword
+  # trigger alone almost never fires a real consult -- which means
+  # data/learning_log.jsonl (what `gremlin finetune` trains on) never
+  # gets populated by normal use. This makes ~8% of otherwise-confident
+  # replies consult anyway, purely to keep real data flowing. Costs a
+  # slower response on however many messages land in that 8% (a local
+  # consult model has to load), but every consult is still logged the
+  # same way an uncertain one would be.
+  consult_sample_rate: 0.08
   # A personality is entirely optional -- left as "" here for a plain,
   # unstyled voice: Gremlin answers as itself, no scripted character
   # flavor layered on top. If you want one, write it as multi-line text

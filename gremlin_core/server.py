@@ -169,6 +169,7 @@ def create_app(
             consult.consult_and_learn(
                 router, "gremlin", gremlin_backend.consult_model_names, message, str(project_root),
                 last_resort_model=gremlin_backend.last_resort_model_name,
+                consult_sample_rate=gremlin_backend.consult_sample_rate,
             ),
         )
         result["synced_count"] = synced_count
@@ -324,7 +325,7 @@ def create_app(
             loop,
             self_improve.run_self_edit(
                 router, str(project_root), goal, model_names,
-                reviewer_a="claude", reviewer_b="gemini", run_tests=run_tests,
+                reviewer_a="gemini", reviewer_b="deepseek-r1-distill-8b", run_tests=run_tests,
                 allow_consult_override=allow_consult_override,
                 consult_models=registry.consult_models(),
             ),

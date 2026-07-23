@@ -35,6 +35,7 @@ Two things this file is careful about:
 from __future__ import annotations
 import json
 import os
+import random
 import time
 from contextlib import contextmanager
 from typing import Optional
@@ -244,6 +245,7 @@ async def consult_and_learn(
     prompt: str,
     root: str,
     last_resort_model: Optional[str] = None,
+    consult_sample_rate: float = 0.0,
 ) -> dict:
     """Thin wrapper around _consult_and_learn_inner that marks Gremlin as
     'talking' (see _talking/is_talking above) for exactly the duration of
@@ -256,6 +258,7 @@ async def consult_and_learn(
         return await _consult_and_learn_inner(
             router, persona_name, consult_models, prompt, root,
             last_resort_model=last_resort_model,
+            consult_sample_rate=consult_sample_rate,
         )
 
 
@@ -266,6 +269,7 @@ async def _consult_and_learn_inner(
     prompt: str,
     root: str,
     last_resort_model: Optional[str] = None,
+    consult_sample_rate: float = 0.0,
 ) -> dict:
     """
     0. If the message is a "remember ..." command, just write it to the
@@ -312,7 +316,14 @@ async def _consult_and_learn_inner(
             "contributors": [],
         }
 
-    if not seems_uncertain(primary_result.text):
+    # Consult either because the primary looked uncertain, or -- since an
+    # abliterated primary rarely hedges in words even when it's wrong --
+    # because this message landed in the random sample kept for passive
+    # learning-log data collection (persona.consult_sample_rate, default
+    # off). Sampled consults still only log if a consult model actually
+    # came back confident; see the `confident` check below.
+    sampled = consult_sample_rate > 0 and random.random() < consult_sample_rate
+    if not seems_uncertain(primary_result.text) and not sampled:
         return {
             "answer": primary_result.text,
             "consulted": False,
@@ -320,7 +331,7 @@ async def _consult_and_learn_inner(
             "contributors": [],
         }
 
-    # Uncertain -- first pass: the general consult group (typically local models).
+    # Uncertain (or sampled) -- first pass: the general consult group (typically local models).
     # Free the primary's VRAM first if any of them are local GGUF models --
     # on a card where primary + even one local consult model wouldn't both
     # fit resident at once (the common case on 8GB: see README's "Confirmed

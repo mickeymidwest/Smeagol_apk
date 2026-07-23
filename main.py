@@ -396,6 +396,7 @@ async def cmd_chat(registry: ModelRegistry, router: Router, model_name: str):
             result = await consult.consult_and_learn(
                 router, model_name, backend.consult_model_names, user_input, PROJECT_ROOT,
                 last_resort_model=backend.last_resort_model_name,
+                consult_sample_rate=backend.consult_sample_rate,
             )
             print(f"{model_name}> {result['answer']}")
             if result["from_memory"]:
@@ -444,7 +445,7 @@ async def cmd_improve(
     allow_consult_override: bool = False,
     consult_models: Optional[list[str]] = None,
     teach_on_failure: bool = False,
-    teacher_model: str = "claude",
+    teacher_model: str = "gemini",
 ):
     print(f"Asking {', '.join(model_names)} to propose changes for: {goal}\n")
     patch = await self_improve.propose_patch(router, model_names, goal, PROJECT_ROOT)
@@ -489,11 +490,11 @@ async def cmd_auto_fix(registry: ModelRegistry, router: Router):
     print(f"Using: {', '.join(model_names)}")
     run_tests_input = input("Also run pytest before committing? (y/N): ").strip().lower()
     override_input = input(
-        "If claude/gemini don't both approve, allow the 4 local consult models "
+        "If gemini/deepseek-r1-distill-8b don't both approve, allow the 4 local consult models "
         "to approve it instead if they unanimously agree? (y/N): "
     ).strip().lower()
     teach_input = input(
-        "If the patch fails to compile or fails a test, ask claude to explain the "
+        "If the patch fails to compile or fails a test, ask gemini to explain the "
         "mistake and log the correction for future fine-tuning? (y/N): "
     ).strip().lower()
 
@@ -503,9 +504,9 @@ async def cmd_auto_fix(registry: ModelRegistry, router: Router):
     # are both opt-in per run, never silent.
     await cmd_improve(
         router, model_names, goal, do_apply=True, run_tests=(run_tests_input == "y"),
-        reviewer_a="claude", reviewer_b="gemini",
+        reviewer_a="gemini", reviewer_b="deepseek-r1-distill-8b",
         allow_consult_override=(override_input == "y"),
-        teach_on_failure=(teach_input == "y"), teacher_model="claude",
+        teach_on_failure=(teach_input == "y"), teacher_model="gemini",
         consult_models=registry.consult_models(),
     )
 
@@ -650,9 +651,9 @@ async def main():
             run_tests = "--test" in extra_args
             allow_consult_override = "--allow-consult-override" in extra_args
             teach_on_failure = "--teach-on-failure" in extra_args
-            reviewer_a = "claude"
-            reviewer_b = "gemini"
-            teacher_model = "claude"
+            reviewer_a = "gemini"
+            reviewer_b = "deepseek-r1-distill-8b"
+            teacher_model = "gemini"
             for arg in extra_args:
                 if arg.startswith("--reviewer-a="):
                     reviewer_a = arg.split("=", 1)[1]
