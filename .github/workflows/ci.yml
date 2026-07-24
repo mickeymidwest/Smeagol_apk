@@ -44,7 +44,7 @@ jobs:
           from gremlin_core import (
               registry, router, persona, consult, self_improve, script_edit,
               review, sandbox, server, model_scan, hf_hub, mutation_log,
-              away_sync, process_lock, status, update_check,
+              away_sync, process_lock, status, update_check, claude_override,
           )
           print('all modules import cleanly')
           "

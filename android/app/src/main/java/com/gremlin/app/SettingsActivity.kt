@@ -178,6 +178,15 @@ class SettingsActivity : AppCompatActivity() {
               known issues with those specific packages. Read-only, doesn't
               need the Admin token below -- just needs to be paired.
 
+            /claude <problem to fix>
+              Shows a warning, then /claude <problem> confirm runs a full
+              Claude Code session on the desktop with FULL autonomy -- it
+              can read/write any file and run any command in the project
+              to actually fix things, not just describe them. Uses the
+              `claude` CLI already logged into your own account on the
+              desktop, not a separate paid API key. Can take a while (up
+              to 10 minutes) for anything nontrivial.
+
             Tips:
             - No shell, so wildcards (*), pipes (|), and && don't work -- just a
               program plus its own flags/arguments.

@@ -41,6 +41,7 @@ from . import root_exec
 from . import self_improve
 from . import snapshots as snapshots_mod
 from . import update_check
+from . import claude_override
 from .sandbox import SecureExecutionSandbox
 from .status import get_status_data
 
@@ -186,6 +187,33 @@ def create_app(
         if auth_error:
             return auth_error
         return jsonify(update_check.run_check())
+
+    @app.route("/admin/claude-override", methods=["POST"])
+    def admin_claude_override():
+        # Admin-gated like /admin/execute, plus the app itself requires a
+        # typed "confirm" step before ever sending this request at all
+        # (same two-step pattern /rollback and /edit already use) -- see
+        # claude_override.py's module docstring for why this deliberately
+        # runs with full autonomy instead of going through self_improve's
+        # two-reviewer gate.
+        auth_error = _check_admin_auth()
+        if auth_error:
+            return auth_error
+
+        body = request.get_json(silent=True) or {}
+        prompt = body.get("prompt", "").strip()
+        if not prompt:
+            return jsonify({"error": "empty prompt"}), 400
+
+        result = claude_override.run_override(str(project_root), prompt)
+
+        mutation_log.append_mutation(str(project_root), {
+            "kind": "claude_override",
+            "prompt": prompt,
+            "ok": result["ok"],
+        })
+
+        return jsonify(result)
 
     @app.route("/admin/execute", methods=["POST"])
     def admin_execute():

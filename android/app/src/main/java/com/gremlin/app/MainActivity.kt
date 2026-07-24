@@ -369,6 +369,24 @@ class MainActivity : AppCompatActivity() {
 
             "/updatecheck" -> runAdminSlash { gremlinClient.checkUpdates() }
 
+            "/claude" -> {
+                val rest = message.removePrefix("/claude").trim()
+                val confirmed = rest.endsWith(" confirm")
+                val problem = (if (confirmed) rest.removeSuffix("confirm") else rest).trim()
+                if (problem.isEmpty()) {
+                    appendSystemTurn("Usage: /claude <problem to fix>  (then /claude <problem> confirm to actually run it)", true)
+                } else if (!confirmed) {
+                    appendSystemTurn(
+                        "This runs a full Claude Code session on the desktop with FULL autonomy -- " +
+                            "it can read/write any file and run any command in the project to fix this, " +
+                            "no further confirmation once started. Type \"/claude $problem confirm\" to proceed.",
+                        false,
+                    )
+                } else {
+                    runAdminSlash { gremlinClient.claudeOverride(problem) }
+                }
+            }
+
             "/rollback" -> {
                 val number = parts.getOrNull(1)
                 val confirmed = parts.getOrNull(2) == "confirm"
@@ -386,7 +404,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             else -> appendSystemTurn(
-                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /edit <goal>, /reboot, /snapshots, /rollback <number>, /updatecheck",
+                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /edit <goal>, /reboot, /snapshots, /rollback <number>, /updatecheck, /claude <problem>",
                 true,
             )
         }

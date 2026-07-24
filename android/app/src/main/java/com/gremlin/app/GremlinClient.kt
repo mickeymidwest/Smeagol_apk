@@ -325,6 +325,38 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
         }
     }
 
+    /** Backs the `/claude <problem> confirm` slash command -- runs the
+     * `claude` CLI non-interactively on the desktop with full autonomy
+     * (--dangerously-skip-permissions), gated by the admin token plus
+     * the app's own required "confirm" step. A real Claude Code session
+     * doing actual work can run a while, hence the long read timeout --
+     * matches claude_override.py's DEFAULT_TIMEOUT (600s) plus headroom. */
+    fun claudeOverride(prompt: String): AdminResult {
+        val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
+        return try {
+            val url = URL("http://$host:$port/admin/claude-override")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Admin-Token", adminToken)
+            connection.doOutput = true
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 630_000
+
+            val body = JSONObject().apply { put("prompt", prompt) }
+            OutputStreamWriter(connection.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val json = JSONObject(stream.bufferedReader().use { it.readText() })
+
+            val ok = responseCode in 200..299 && json.optBoolean("ok")
+            AdminResult(ok, json.optString(if (ok) "result" else "error", "HTTP $responseCode"))
+        } catch (e: Exception) {
+            AdminResult(false, "Couldn't reach desktop: ${e.message}")
+        }
+    }
+
     /** Backs the `/snapshots` slash command. */
     fun listSnapshots(): AdminResult {
         val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
