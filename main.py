@@ -15,12 +15,12 @@ Usage (after `chmod +x gremlin` and putting it on your PATH):
   gremlin broadcast <model1,model2,...> "<prompt>"
   gremlin plan <model1,model2,...> "<task>"
   gremlin improve <model1,model2,...> "<goal>" [--apply] [--test] [--reviewer-a=NAME] [--reviewer-b=NAME] [--allow-consult-override] [--teach-on-failure] [--teacher=NAME]
-    --allow-consult-override: if reviewer-a/reviewer-b (default claude/gemini) don't both
-    approve, fall back to checking whether all 4 local consult models (config/models.yaml
-    persona.consult_models) unanimously approve instead. Off by default -- must be requested
-    explicitly per run.
+    --allow-consult-override: if reviewer-a/reviewer-b (default gemini/deepseek-r1-distill-8b)
+    don't both approve, fall back to checking whether all 4 local consult models
+    (config/models.yaml persona.consult_models) unanimously approve instead. Off by default --
+    must be requested explicitly per run.
     --teach-on-failure: if the applied patch fails to compile or fails a test (a real,
-    concrete failure -- not just "didn't apply cleanly"), --teacher (default claude) explains
+    concrete failure -- not just "didn't apply cleanly"), --teacher (default gemini) explains
     the mistake and the correction is logged to data/learning_log.jsonl as future fine-tuning
     material. Never auto-applies the correction. Off by default.
   gremlin auto-fix
@@ -41,6 +41,10 @@ Usage (after `chmod +x gremlin` and putting it on your PATH):
     --promote the new .gguf is left on disk untouched; with it, persona.primary_model in
     config/models.yaml is switched to the new version (the old model entry/file are left
     alone either way, so reverting is a one-line config edit).
+  gremlin update-check             -- checks pending pacman updates (via checkupdates,
+    never modifies anything) against Manjaro's own forum "Stable Update" thread for known
+    issues affecting those specific packages. Advisory only -- never runs the actual
+    update. Needs pacman-contrib installed (`sudo pacman -S pacman-contrib`).
 
 Or directly: python main.py <command> ...
 """
@@ -60,6 +64,7 @@ from gremlin_core import hf_hub
 from gremlin_core import root_exec
 from gremlin_core import snapshots as snapshots_mod
 from gremlin_core import finetune
+from gremlin_core import update_check
 from gremlin_core.process_lock import git_mutation_lock, AlreadyRunning
 
 try:
@@ -372,6 +377,14 @@ def cmd_finetune(promote: bool):
         )
 
 
+def cmd_update_check():
+    result = update_check.run_check()
+    if not result["ok"]:
+        print(result["error"])
+        return
+    print(result["summary"])
+
+
 async def cmd_list(registry: ModelRegistry):
     print("Registered models:")
     for name in registry.names():
@@ -627,6 +640,10 @@ async def main():
     if cmd == "finetune":
         promote = "--promote" in sys.argv[2:]
         cmd_finetune(promote)
+        return
+
+    if cmd == "update-check":
+        cmd_update_check()
         return
 
     registry = ModelRegistry.from_yaml(CONFIG_PATH)

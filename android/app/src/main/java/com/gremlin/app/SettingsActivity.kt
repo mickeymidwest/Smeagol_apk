@@ -158,6 +158,11 @@ class SettingsActivity : AppCompatActivity() {
               Shows a confirmation, then /rollback <number> confirm rolls the
               desktop back to that snapshot and reboots it.
 
+            /updatecheck
+              Checks pending pacman updates against Manjaro's own forum for
+              known issues with those specific packages. Read-only, doesn't
+              need the Admin token below -- just needs to be paired.
+
             Tips:
             - No shell, so wildcards (*), pipes (|), and && don't work -- just a
               program plus its own flags/arguments.

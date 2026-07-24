@@ -293,6 +293,38 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
         }
     }
 
+    /** Backs the `/updatecheck` slash command -- regular (non-admin) auth,
+     * since this only reads pending package names + a public forum
+     * thread, same as /status or /chat. */
+    fun checkUpdates(): AdminResult {
+        val host = prefs.getString("host", null)
+        val port = prefs.getInt("port", 0)
+        val token = prefs.getString("token", null)
+        if (host == null || port == 0 || token == null) {
+            return AdminResult(false, "Not paired with a desktop")
+        }
+        return try {
+            val url = URL("http://$host:$port/update-check")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 30_000
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val json = JSONObject(stream.bufferedReader().use { it.readText() })
+
+            if (responseCode !in 200..299 || !json.optBoolean("ok")) {
+                AdminResult(false, json.optString("error", "HTTP $responseCode"))
+            } else {
+                AdminResult(true, json.optString("summary"))
+            }
+        } catch (e: Exception) {
+            AdminResult(false, "Couldn't reach desktop: ${e.message}")
+        }
+    }
+
     /** Backs the `/snapshots` slash command. */
     fun listSnapshots(): AdminResult {
         val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())

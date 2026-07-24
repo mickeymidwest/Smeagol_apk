@@ -40,6 +40,7 @@ from . import mutation_log
 from . import root_exec
 from . import self_improve
 from . import snapshots as snapshots_mod
+from . import update_check
 from .sandbox import SecureExecutionSandbox
 from .status import get_status_data
 
@@ -174,6 +175,17 @@ def create_app(
         )
         result["synced_count"] = synced_count
         return jsonify(result)
+
+    @app.route("/update-check", methods=["GET"])
+    def update_check_route():
+        # Regular (non-admin) auth -- this only reads pending package
+        # names via `checkupdates` and a public forum thread, never
+        # modifies anything, so it doesn't need the admin token the way
+        # /admin/execute's actual command execution does.
+        auth_error = _check_auth()
+        if auth_error:
+            return auth_error
+        return jsonify(update_check.run_check())
 
     @app.route("/admin/execute", methods=["POST"])
     def admin_execute():

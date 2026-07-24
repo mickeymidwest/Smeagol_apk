@@ -346,8 +346,8 @@ class MainActivity : AppCompatActivity() {
                     appendSystemTurn("Usage: /edit <what to change>  (then /edit <what to change> confirm to actually apply it)", true)
                 } else if (!confirmed) {
                     appendSystemTurn(
-                        "This asks Gremlin to propose a code change for itself, reviewed by claude+gemini, " +
-                            "and commits it to git if both approve. Type \"/edit $goal confirm\" to proceed.",
+                        "This asks Gremlin to propose a code change for itself, reviewed by two independent " +
+                            "models, and commits it to git if both approve. Type \"/edit $goal confirm\" to proceed.",
                         false,
                     )
                 } else {
@@ -356,6 +356,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             "/snapshots" -> runAdminSlash { gremlinClient.listSnapshots() }
+
+            "/updatecheck" -> runAdminSlash { gremlinClient.checkUpdates() }
 
             "/rollback" -> {
                 val number = parts.getOrNull(1)
@@ -374,7 +376,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             else -> appendSystemTurn(
-                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /edit <goal>, /reboot, /snapshots, /rollback <number>",
+                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /edit <goal>, /reboot, /snapshots, /rollback <number>, /updatecheck",
                 true,
             )
         }
