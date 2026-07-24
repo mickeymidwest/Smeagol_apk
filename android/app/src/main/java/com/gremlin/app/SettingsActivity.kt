@@ -2,6 +2,7 @@ package com.gremlin.app
 
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -9,6 +10,7 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.RadioGroup
+import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -16,12 +18,24 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.gremlin.app.llama.LocalLlama
 import com.gremlin.app.llama.LocalModelManager
+import com.gremlin.app.voice.VoiceOutput
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 class SettingsActivity : AppCompatActivity() {
+
+    // Separate from MainActivity's VoiceOutput -- this one only exists to
+    // back the "Test voice" button here, scoped to this activity's own
+    // lifecycle rather than reaching into MainActivity's instance.
+    private var testTts: TextToSpeech? = null
+
+    override fun onDestroy() {
+        super.onDestroy()
+        testTts?.shutdown()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +86,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         setUpLocalModelSection(prefs)
+        setUpVoiceSection(prefs)
 
         if (host.isNotEmpty()) {
             loadStatus(host, port, token)
@@ -321,6 +336,66 @@ class SettingsActivity : AppCompatActivity() {
                 .setNegativeButton("Cancel", null)
                 .show()
         }
+    }
+
+    /** Speaks replies aloud via Android's built-in TTS -- see
+     * VoiceOutput.kt for the actual speak-on-reply logic (that lives in
+     * MainActivity, since that's where replies actually arrive). This
+     * just edits the prefs it reads (voice_enabled/voice_pitch/voice_rate)
+     * and offers a way to preview them before leaving this screen. */
+    private fun setUpVoiceSection(prefs: SharedPreferences) {
+        val enabledCheckbox = findViewById<CheckBox>(R.id.voice_enabled_checkbox)
+        val pitchSeekBar = findViewById<SeekBar>(R.id.voice_pitch_seekbar)
+        val rateSeekBar = findViewById<SeekBar>(R.id.voice_rate_seekbar)
+        val testButton = findViewById<Button>(R.id.voice_test_button)
+
+        enabledCheckbox.isChecked = prefs.getBoolean("voice_enabled", false)
+        pitchSeekBar.progress = (prefs.getFloat("voice_pitch", VoiceOutput.DEFAULT_PITCH) * 100).toInt()
+        rateSeekBar.progress = (prefs.getFloat("voice_rate", VoiceOutput.DEFAULT_RATE) * 100).toInt()
+
+        enabledCheckbox.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean("voice_enabled", checked).apply()
+        }
+
+        // Saved on every move rather than only e.g. on stopTrackingTouch --
+        // simpler, and a SeekBar drag is cheap enough that there's no
+        // real cost to just always being up to date.
+        pitchSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                prefs.edit().putFloat("voice_pitch", (progress.coerceAtLeast(10)) / 100f).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+        rateSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                prefs.edit().putFloat("voice_rate", (progress.coerceAtLeast(10)) / 100f).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+
+        testButton.setOnClickListener {
+            if (testTts == null) {
+                testTts = TextToSpeech(applicationContext) { status ->
+                    if (status == TextToSpeech.SUCCESS) {
+                        testTts?.language = Locale.US
+                        speakTest(prefs)
+                    } else {
+                        Toast.makeText(this, "No text-to-speech engine available", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } else {
+                speakTest(prefs)
+            }
+        }
+    }
+
+    private fun speakTest(prefs: SharedPreferences) {
+        val engine = testTts ?: return
+        engine.setPitch(prefs.getFloat("voice_pitch", VoiceOutput.DEFAULT_PITCH))
+        engine.setSpeechRate(prefs.getFloat("voice_rate", VoiceOutput.DEFAULT_RATE))
+        engine.speak("This is what I sound like.", TextToSpeech.QUEUE_FLUSH, null, "voice-test")
     }
 
     private fun setUpModelSpinner(spinner: Spinner, choicesArrayRes: Int, savedValue: String?) {

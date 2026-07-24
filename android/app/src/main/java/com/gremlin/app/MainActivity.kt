@@ -20,6 +20,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.zxing.integration.android.IntentIntegrator
 import com.google.zxing.integration.android.IntentResult
+import com.gremlin.app.voice.VoiceOutput
 import java.io.File
 import java.net.URI
 
@@ -27,6 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
     private lateinit var gremlinClient: GremlinClient
+    private lateinit var voiceOutput: VoiceOutput
 
     private lateinit var connectionLabel: TextView
     private lateinit var chatLog: TextView
@@ -59,6 +61,7 @@ class MainActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences("gremlin_prefs", MODE_PRIVATE)
         gremlinClient = GremlinClient(prefs, applicationContext)
+        voiceOutput = VoiceOutput(applicationContext, prefs)
 
         connectionLabel = findViewById(R.id.connection_label)
         chatLog = findViewById(R.id.chat_log)
@@ -170,6 +173,11 @@ class MainActivity : AppCompatActivity() {
 
     // onActivityResult is deprecated in favor of the newer Activity Result
     // API, but it's still the standard, documented integration path for
+    override fun onDestroy() {
+        super.onDestroy()
+        voiceOutput.shutdown()
+    }
+
     // zxing-android-embedded's classic IntentIntegrator flow. Android
     // Studio will likely show a deprecation lint warning here -- expected,
     // safe to ignore for this specific library usage.
@@ -271,6 +279,7 @@ class MainActivity : AppCompatActivity() {
 
         appendUserTurn(message)
         messageInput.setText("")
+        voiceOutput.stop() // a new message shouldn't have gremlin still talking over it
 
         // Pushed directly rather than polled -- unlike the desktop
         // window (a separate process from wherever chat actually
@@ -290,6 +299,7 @@ class MainActivity : AppCompatActivity() {
                     else -> null
                 }
                 appendAssistantTurn(result.answer, subStatus)
+                voiceOutput.speak(result.answer)
                 hologramView.evaluateJavascript("setTalking(false)", null)
                 thinkingStatus.visibility = View.GONE
             }
