@@ -79,6 +79,13 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.export_button).setOnClickListener {
             exportLauncher.launch("gremlin-chat-${System.currentTimeMillis()}.txt")
         }
+        // A real, always-visible way into Settings -- the hologram WebView
+        // can also open it via JsBridge.openSettings() (tapping the
+        // hologram itself), but that's JS-driven and its tappable area
+        // changes once models are linked/paired, which made Settings
+        // effectively unreachable once you'd actually set anything up.
+        // This button doesn't depend on the hologram's state at all.
+        findViewById<Button>(R.id.settings_button).setOnClickListener { openSettings() }
     }
 
     override fun onResume() {
@@ -91,16 +98,18 @@ class MainActivity : AppCompatActivity() {
         Thread { gremlinClient.fetchStatusRaw() }.start()
     }
 
+    private fun openSettings() {
+        val intent = Intent(this, SettingsActivity::class.java)
+        intent.putExtra("host", prefs.getString("host", null))
+        intent.putExtra("port", prefs.getInt("port", 0))
+        intent.putExtra("token", prefs.getString("token", null))
+        startActivity(intent)
+    }
+
     private inner class JsBridge {
         @JavascriptInterface
         fun openSettings() {
-            runOnUiThread {
-                val intent = Intent(this@MainActivity, SettingsActivity::class.java)
-                intent.putExtra("host", prefs.getString("host", null))
-                intent.putExtra("port", prefs.getInt("port", 0))
-                intent.putExtra("token", prefs.getString("token", null))
-                startActivity(intent)
-            }
+            runOnUiThread { this@MainActivity.openSettings() }
         }
 
         @JavascriptInterface

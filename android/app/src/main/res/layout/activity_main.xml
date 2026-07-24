@@ -90,6 +90,14 @@
             android:text="Export Chat"
             style="?attr/borderlessButtonStyle"
             android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/settings_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            style="?attr/borderlessButtonStyle"
+            android:textSize="11sp" />
     </LinearLayout>
 
 </LinearLayout>
