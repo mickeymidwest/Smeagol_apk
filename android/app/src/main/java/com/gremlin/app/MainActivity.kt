@@ -369,6 +369,26 @@ class MainActivity : AppCompatActivity() {
 
             "/updatecheck" -> runAdminSlash { gremlinClient.checkUpdates() }
 
+            "/fix" -> {
+                val rest = message.removePrefix("/fix").trim()
+                val confirmed = rest.endsWith(" confirm")
+                val withoutConfirm = (if (confirmed) rest.removeSuffix("confirm") else rest).trim()
+                val path = withoutConfirm.substringBefore(" ", "")
+                val problem = withoutConfirm.substringAfter(" ", "").trim()
+                if (path.isEmpty() || problem.isEmpty()) {
+                    appendSystemTurn("Usage: /fix <path> <what's wrong>  (then /fix <path> <what's wrong> confirm to actually apply it)", true)
+                } else if (!confirmed) {
+                    appendSystemTurn(
+                        "This asks Gremlin's own registered models to fix $path (not the separate `claude` " +
+                            "CLI -- see /claude for that). Backs up the file first and reverts automatically " +
+                            "if the fix fails to compile. Type \"/fix $path $problem confirm\" to proceed.",
+                        false,
+                    )
+                } else {
+                    runAdminSlash { gremlinClient.scriptFix(path, problem) }
+                }
+            }
+
             "/claude" -> {
                 val rest = message.removePrefix("/claude").trim()
                 val confirmed = rest.endsWith(" confirm")
@@ -404,7 +424,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             else -> appendSystemTurn(
-                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /edit <goal>, /reboot, /snapshots, /rollback <number>, /updatecheck, /claude <problem>",
+                "Unknown command: $cmd\nAvailable: /desktop <command>, /root <command>, /edit <goal>, /fix <path> <problem>, /reboot, /snapshots, /rollback <number>, /updatecheck, /claude <problem>",
                 true,
             )
         }

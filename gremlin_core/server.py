@@ -39,6 +39,7 @@ from . import model_scan
 from . import mutation_log
 from . import root_exec
 from . import self_improve
+from . import script_edit
 from . import snapshots as snapshots_mod
 from . import update_check
 from . import claude_override
@@ -380,6 +381,55 @@ def create_app(
             "files_changed": result.get("files_changed", []),
         })
 
+        return jsonify(result)
+
+    @app.route("/admin/script-edit", methods=["POST"])
+    def admin_script_edit():
+        """Gremlin fixing/editing something on the desktop that ISN'T its
+        own code -- distinct on purpose from /admin/self-edit (this
+        project's own source, two-reviewer gated) and
+        /admin/claude-override (shells out to the separate `claude` CLI
+        under the user's own subscription instead of Gremlin's own
+        models). This one runs entirely on Gremlin's own registered
+        models end to end. See script_edit.py's module docstring for the
+        safety design (system-path refusal, a backup made before
+        anything is touched, revert on a failed compile/verify check)
+        that substitutes for a second-reviewer gate here, since this
+        path can touch any file, not just this project's own reviewed
+        codebase."""
+        auth_error = _check_admin_auth()
+        if auth_error:
+            return auth_error
+
+        body = request.get_json(silent=True) or {}
+        path = body.get("path", "").strip()
+        problem = body.get("problem", "").strip()
+        verify_command = body.get("verify_command") or None
+        if not path or not problem:
+            return jsonify({"error": "'path' and 'problem' are required"}), 400
+
+        refusal = script_edit.check_path_safety(path)
+        if refusal:
+            return jsonify({"ok": False, "error": refusal}), 400
+
+        resolved = Path(path).expanduser().resolve()
+        if not resolved.exists() or not resolved.is_file():
+            return jsonify({"ok": False, "error": f"no such file: {resolved}"}), 400
+
+        async def _propose_and_apply():
+            model_names = [n for n in registry.names() if registry.get(n).info.kind != "persona"]
+            new_content = await script_edit.propose_fix(router, model_names, str(resolved), problem)
+            old_content = resolved.read_text()
+            diff = script_edit.diff_preview(old_content, new_content, resolved.name)
+            if not diff.strip():
+                return {"ok": True, "applied": False, "diff": "", "message": "No changes proposed -- nothing to do."}
+            apply_result = await script_edit.apply_fix(
+                str(resolved), new_content, verify_command=verify_command,
+                project_root=str(project_root), problem=problem,
+            )
+            return {"ok": True, "diff": diff, **apply_result}
+
+        result = run_coro(loop, _propose_and_apply(), timeout=300.0)
         return jsonify(result)
 
     @app.route("/admin/reboot", methods=["POST"])

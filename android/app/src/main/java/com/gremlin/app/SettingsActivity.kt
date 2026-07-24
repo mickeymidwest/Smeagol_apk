@@ -73,6 +73,14 @@ class SettingsActivity : AppCompatActivity() {
         setUpModelSpinner(claudeModelSpinner, R.array.claude_model_choices, prefs.getString("claude_model_id", null))
         setUpModelSpinner(geminiModelSpinner, R.array.gemini_model_choices, prefs.getString("gemini_model_id", null))
 
+        // Admin token field lives further down this screen (see below),
+        // but it's grabbed here too so the one "Save" button covers
+        // everything on this screen -- it used to only get persisted as
+        // a side effect of clicking "Run on Desktop"/"Reboot Desktop",
+        // which meant typing a token (or a *new* token) and just
+        // navigating away silently never saved it at all.
+        val adminTokenInputForSave = findViewById<EditText>(R.id.admin_token_input)
+
         findViewById<Button>(R.id.save_keys_button).setOnClickListener {
             val preferred = if (providerGroup.checkedRadioButtonId == R.id.prefer_gemini_radio) "gemini" else "claude"
             prefs.edit()
@@ -81,6 +89,7 @@ class SettingsActivity : AppCompatActivity() {
                 .putString("away_preferred", preferred)
                 .putString("claude_model_id", claudeModelSpinner.selectedItem as String)
                 .putString("gemini_model_id", geminiModelSpinner.selectedItem as String)
+                .putString("admin_token", adminTokenInputForSave.text.toString().trim())
                 .apply()
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
         }
@@ -177,6 +186,13 @@ class SettingsActivity : AppCompatActivity() {
               Checks pending pacman updates against Manjaro's own forum for
               known issues with those specific packages. Read-only, doesn't
               need the Admin token below -- just needs to be paired.
+
+            /fix <path> <what's wrong>
+              Shows a warning, then /fix <path> <what's wrong> confirm asks
+              Gremlin's own registered models (not the separate claude CLI)
+              to fix a specific file anywhere on the desktop -- your own
+              scripts/configs, not system files. Backs up the file first,
+              reverts automatically if the fix fails to compile.
 
             /claude <problem to fix>
               Shows a warning, then /claude <problem> confirm runs a full

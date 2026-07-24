@@ -357,6 +357,47 @@ class GremlinClient(private val prefs: SharedPreferences, private val appContext
         }
     }
 
+    /** Backs the `/fix <path> <problem> confirm` slash command -- Gremlin
+     * fixing something on the desktop that ISN'T its own code, using its
+     * own registered models end to end (not the separate `claude` CLI --
+     * see claudeOverride() for that). Long timeout for the same reason
+     * as claudeOverride: this involves real model generation plus a
+     * compile/verify check, not an instant response. */
+    fun scriptFix(path: String, problem: String, verifyCommand: String? = null): AdminResult {
+        val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
+        return try {
+            val url = URL("http://$host:$port/admin/script-edit")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Admin-Token", adminToken)
+            connection.doOutput = true
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 310_000
+
+            val body = JSONObject().apply {
+                put("path", path)
+                put("problem", problem)
+                if (!verifyCommand.isNullOrBlank()) put("verify_command", verifyCommand)
+            }
+            OutputStreamWriter(connection.outputStream).use { it.write(body.toString()) }
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val json = JSONObject(stream.bufferedReader().use { it.readText() })
+
+            if (responseCode !in 200..299 || !json.optBoolean("ok")) {
+                AdminResult(false, json.optString("error", "HTTP $responseCode"))
+            } else if (json.optBoolean("applied", false)) {
+                AdminResult(true, "Applied. Backup: ${json.optString("backup_path")}\n\n${json.optString("diff")}")
+            } else {
+                AdminResult(true, json.optString("reason", json.optString("message", "No changes applied.")))
+            }
+        } catch (e: Exception) {
+            AdminResult(false, "Couldn't reach desktop: ${e.message}")
+        }
+    }
+
     /** Backs the `/snapshots` slash command. */
     fun listSnapshots(): AdminResult {
         val (host, port, adminToken) = adminCreds() ?: return AdminResult(false, adminCredsError())
